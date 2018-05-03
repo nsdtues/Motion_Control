@@ -1,0 +1,2 @@
+string serial_force_state
+int32 force
