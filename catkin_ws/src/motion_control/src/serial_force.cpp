@@ -19,9 +19,14 @@ void serial_read_loop(void)
 	msg_serial_force.serial_force_state = "hello world";
 	msg_serial_force.force = 2000;
 	
-	pub_msg_force.publish(msg_serial_force);
-	
-	return;
+	for(;;){
+		pub_msg_force.publish(msg_serial_force);
+		msg_serial_force.force = msg_serial_force.force - 1;
+		if(msg_serial_force.force < 500){
+			msg_serial_force.force = 2000;
+		}
+		usleep(1000);
+	}	
 }
 
 
