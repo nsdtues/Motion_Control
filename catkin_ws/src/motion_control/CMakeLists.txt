@@ -52,6 +52,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   msg_serial_force.msg
+  msg_serial_pot.msg
   # Message2.msg
 )
 

@@ -1,2 +1,2 @@
 string serial_force_state
-uint32 force
+uint32 pot
