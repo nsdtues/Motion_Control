@@ -7,8 +7,6 @@
 #include "motion_control/msg_serial_force.h"
 #include "predefinition.h"
 
-
-
 int FrocePort;
 ros::Publisher pub_msg_force;
 
@@ -130,8 +128,6 @@ uint32_t bubble_sort_and_average(uint32_t *msg, uint8_t len)
 
 void serial_read_loop(void)
 {
-
-	
 	motion_control::msg_serial_force msg_serial_force;
 	uint32_t force_temp[12];
 	int i;

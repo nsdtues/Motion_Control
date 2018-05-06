@@ -3,6 +3,7 @@
 #include <linux/serial.h>
 #include <sys/ioctl.h>
 
+
 //设置串口参数，波特率 奇偶位等
 int set_opt(int fd,int nSpeed,int nBits,char nEvent,int nStop)
 {
@@ -95,7 +96,7 @@ int set_opt(int fd,int nSpeed,int nBits,char nEvent,int nStop)
 }
 
 //串口初始化，设置串口参数，驱动器上电默认波特率为9600，需要将其改为115200
-int driver_init(int port,char* port_num)
+int driver_init(int port,const char* port_num)
 {
 	int ret=0;
 	int nwrite;
@@ -132,41 +133,29 @@ int driver_init(int port,char* port_num)
 
 //打开串口设备函数
 //驱动器串口默认为USB1，电位计串口默认为USB0，力传感器串口默认为USB2
-int tty_init(char *CurrentPort)
+int tty_init(const char *CurrentPort)
 {
 	char com[16],pnum[2];
 	int TempPort;
-	//打开串口设备
-//  	if (argc > 1) {
-//  	  	CurrentPort = atoi(argv[1]);
-//  	  	if(CurrentPort>255)
-// 	  		CurrentPort=0;
-//  	}
+	memset(com, 0, sizeof(com));
 
-  memset(com, 0, sizeof(com));
-//  	strcpy(com, "/dev/ttyUSB");
-//  	itoa(CurrentPort, pnum, 10);
-//	memset(pnum,0,sizeof(pnum));
-//	sprintf(pnum,"%d",CurrentPort);
-//  	strcat(com, pnum);
-//  	fprintf(stderr,"port=%d,dev=%s\n",CurrentPort,com);
 	sprintf(com,CurrentPort,NULL);
-  TempPort = open(com, O_RDWR|O_NOCTTY|O_NDELAY);
+	TempPort = open(com, O_RDWR|O_NOCTTY|O_NDELAY);
 	printf("tempport = %d\n",TempPort);
-  if (TempPort < 0 ) {
+	if (TempPort < 0 ) {
 		return TempPort;
-  }
+	}
   	//恢复串口为阻塞状态
-  if(fcntl(TempPort,F_SETFL,0)<0)
-  	printf("fcntl failed\n");
-  else
+	if(fcntl(TempPort,F_SETFL,0)<0)
+		printf("fcntl failed\n");
+	else
   	printf("fcntl=%d\n",fcntl(TempPort,F_SETFL,0));
   	//测试是否为终端设备
-  if(isatty(STDIN_FILENO)==0){
-  	printf("standard input is not a terminal device\n");
-	}
-  else
-  	printf("isatty success!\n");
+	if(isatty(STDIN_FILENO)==0){
+		printf("standard input is not a terminal device\n");
+		}
+	else
+		printf("isatty success!\n");
 
 	return TempPort;
 }

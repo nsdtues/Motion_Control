@@ -53,6 +53,11 @@ add_message_files(
   FILES
   msg_serial_force.msg
   msg_serial_pot.msg
+  msg_motion_cmd.msg
+  node_motor_msg_to_sys.msg
+  sys_cmd_msg_to_motor.msg
+  sensor_foot_pressure_msg.msg
+  sensor_position_msg.msg
   # Message2.msg
 )
 
@@ -149,13 +154,17 @@ include
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-add_executable(serial_force src/serial_force.cpp src/port.c)
+add_executable(serial_force src/serial_force.cpp src/port.c src/user_time.c)
 add_dependencies(serial_force ${catkin_EXPORTED_TARGETS})
 target_link_libraries(serial_force  ${catkin_LIBRARIES} )
 
-add_executable(serial_motor src/serial_motor.cpp src/port.c)
+add_executable(serial_motor src/serial_motor.cpp src/port.c src/user_time.c)
 add_dependencies(serial_motor ${catkin_EXPORTED_TARGETS})
 target_link_libraries(serial_motor  ${catkin_LIBRARIES} )
+
+add_executable(system_pot src/system_pot.cpp src/port.c src/user_time.c)
+add_dependencies(system_pot ${catkin_EXPORTED_TARGETS})
+target_link_libraries(system_pot  ${catkin_LIBRARIES} )
 
 #############
 ## Install ##

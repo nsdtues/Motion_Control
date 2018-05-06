@@ -59,7 +59,7 @@ enum check_results_t{
 };
 
 
-#define SENSER_OK					"sensor_ok"
+#define SENSER_OK			"sensor_ok"
 #define SENSER_NO_PORT		"sensor_noport"
 #define SENSER_NO_DATA		"sensor_nodata"
 #define SENSER_OUT_RANGE	"sensor_outofrange"
@@ -95,9 +95,14 @@ struct motor_para_init_t{
 	int pid_umin;
 };
 
+//pot.c
 int set_opt(int fd,int nSpeed,int nBits,char nEvent,int nStop);
-int driver_init(int port,char* port_num);
-int tty_init(char *CurrentPort);
+int driver_init(int port,const char* port_num);
+int tty_init(const char *CurrentPort);
+//user_time.c
+struct timespec gettimeout(uint32_t timeout);
+uint32_t gettime_ms(struct timeval tv);
+
 
 #ifdef __cplusplus
 }
