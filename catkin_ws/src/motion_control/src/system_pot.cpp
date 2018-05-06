@@ -18,7 +18,6 @@ uint16_t pot;
 
 void position_callback(const motion_control::sensor_position_msg& pot_input)
 {
-	std::string serial_pot_state;	
 	pot = pot_input.position;
 	sem_post(&sem_sub);	
 }
