@@ -4,6 +4,8 @@
 
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
+#include "boost/interprocess/sync/interprocess_semaphore.hpp"
+#include "boost/date_time/posix_time/posix_time.hpp"
 #include <ros/ros.h>
 #include "motion_control/msg_motion_cmd.h"
 #include "motion_control/sys_cmd_msg_to_motor.h"
@@ -13,6 +15,9 @@
 
 sem_t sem_sub;
 sem_t sem_pub;
+
+boost::interprocess::interprocess_semaphore sub_semaphore(0);
+boost::interprocess::interprocess_semaphore pub_semaphore(0);
 
 ros::Publisher pub_msg_motion_cmd;
 ros::Publisher pub_node_motor_msg_to_sys;
@@ -30,20 +35,20 @@ void get_default_settings(void)
 void sys_cmd_msg_to_motor_callback(const motion_control::sys_cmd_msg_to_motor& cmd_input)
 {
 	motion_state = cmd_input.syscmd;
-	sem_post(&sem_sub);	
+	sub_semaphore.post();
 }
 
 void msg_motion_evt_callback(const motion_control::msg_motion_evt& evt_input)
 {
 	motor_check_results = evt_input.check_results;
 	sem_post(&sem_pub);		
+	pub_semaphore.post();
 }
 
 
 void motion_cmd_pub_loop(void)
 {
-	struct timespec ts;
-    uint32_t timeout = 1000;
+	boost::posix_time::ptime tv;
 	
 	motion_control::msg_motion_cmd msg_motion_cmd;
 	motion_control::node_motor_msg_to_sys node_motor_msg_to_sys;	
@@ -60,8 +65,8 @@ void motion_cmd_pub_loop(void)
 
 	pub_msg_motion_cmd.publish(msg_motion_cmd);
 	
-    sem_wait(&sem_sub);
-
+	sub_semaphore.wait();
+	
     sleep(2);
 
     if(msg_motion_evt.check_results == module_check_success){
@@ -74,16 +79,14 @@ void motion_cmd_pub_loop(void)
 #endif	
 	
 	for(;;){
-		sem_wait(&sem_sub);
+		sub_semaphore.wait();
 		if(motion_state == "cmdmotorintial"){
 			if(msg_motion_cmd.state != CTL_CMDINITIAL){
 				msg_motion_cmd.state = CTL_CMDINITIAL;
-				
-				timeout = 120;
-				ts = gettimeout(timeout);
+			
 				
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-				if(sem_timedwait(&sem_pub,&ts) == 0){
+				if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(120))){
 					if(msg_motion_evt.check_results == module_check_success){
 						node_motor_msg_to_sys.evt = "initialsuccess";
 					}else{
@@ -100,11 +103,8 @@ void motion_cmd_pub_loop(void)
             if(msg_motion_cmd.state != CTL_CMDPOWERDOWN){
                 msg_motion_cmd.state = CTL_CMDPOWERDOWN;
 
-                timeout = 10;
-                ts = gettimeout(timeout);
-
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-                if(sem_timedwait(&sem_pub,&ts)==0){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "shutdownsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "shutdownerror";
@@ -116,12 +116,9 @@ void motion_cmd_pub_loop(void)
 		}else if(motion_state == "cmdmotorstop"){
 			if(msg_motion_cmd.state != CTL_CMDMOTIONSTOP){
                 msg_motion_cmd.state = CTL_CMDMOTIONSTOP;
-				
-                timeout = 10;
-                ts = gettimeout(timeout);
 
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-                if(sem_timedwait(&sem_pub,&ts) == 0){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "stopsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "stoperrorID";
@@ -134,12 +131,9 @@ void motion_cmd_pub_loop(void)
 			if(msg_motion_cmd.state != CTL_CMDMOTIONSLEEP){
                 msg_motion_cmd.state = CTL_CMDMOTIONSLEEP;
 
-                timeout = 10;
-                ts = gettimeout(timeout);
-
                 pub_msg_motion_cmd.publish(msg_motion_cmd);
 
-                if(sem_timedwait(&sem_pub,&ts) == 0){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "pausesuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "pausesuccess";
@@ -153,12 +147,9 @@ void motion_cmd_pub_loop(void)
 			if(msg_motion_cmd.state != CTL_CMDMOTIONSTART){
                 msg_motion_cmd.state = CTL_CMDMOTIONSTART;
 
-                timeout = 10;
-                ts = gettimeout(timeout);
-
                 pub_msg_motion_cmd.publish(msg_motion_cmd);
 
-                if(sem_timedwait(&sem_pub,&ts) == 0){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "motorstartsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "starterrorID";

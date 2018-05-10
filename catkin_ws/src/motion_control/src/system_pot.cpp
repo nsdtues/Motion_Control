@@ -4,6 +4,7 @@
 
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
+#include "boost/interprocess/sync/interprocess_semaphore.hpp"
 #include <ros/ros.h>
 #include "motion_control/msg_serial_pot.h"
 #include "motion_control/sensor_position_msg.h"
@@ -11,15 +12,14 @@
 
 ros::Publisher pub_msg_pot;
 
-sem_t sem_sub;
-sem_t sem_pub;
+boost::interprocess::interprocess_semaphore sub_semaphore(0);
 
 uint16_t pot;
 
 void position_callback(const motion_control::sensor_position_msg& pot_input)
 {
 	pot = pot_input.position;
-	sem_post(&sem_sub);	
+	sub_semaphore.post();
 }
 
 
@@ -40,7 +40,7 @@ void pot_pub_loop(void){
     }
 	
 	
-	sem_wait(&sem_sub);
+	sub_semaphore.wait();
 	
 	msg_serial_pot.serial_pot_state = SENSER_OK;
 	pot_t = (float)pot/1000;
@@ -55,7 +55,7 @@ void pot_pub_loop(void){
 	
 	for(;;){
 		
-		sem_wait(&sem_sub);
+		sub_semaphore.wait();
 		pot_t = (float)pot/1000;
 		
 		if(pot_t < pot_mid){
@@ -63,7 +63,7 @@ void pot_pub_loop(void){
 		}
 		pot_t = pot_t - pot_mid;	
 		
-        if((pot_t < PROTECTION_POT_VALUE_L)&&(pot_t > PROTECTION_POT_VALUE_H)){
+        if((pot_t < PROTECTION_POT_VALUE_L)||(pot_t > PROTECTION_POT_VALUE_H)){
 			msg_serial_pot.serial_pot_state = SENSER_OUT_RANGE;
         }		
 		msg_serial_pot.pot = pot_t;

@@ -59,6 +59,7 @@ add_message_files(
   sys_cmd_msg_to_motor.msg
   sensor_foot_pressure_msg.msg
   sensor_position_msg.msg
+  msg_gait.msg
   # Message2.msg
 )
 
