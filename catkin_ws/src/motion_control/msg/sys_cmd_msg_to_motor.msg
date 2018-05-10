@@ -1,2 +1,2 @@
-string  syscmd
+string syscmd
 uint16 data

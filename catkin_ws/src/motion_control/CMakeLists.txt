@@ -54,6 +54,7 @@ add_message_files(
   msg_serial_force.msg
   msg_serial_pot.msg
   msg_motion_cmd.msg
+  msg_motion_evt.msg
   node_motor_msg_to_sys.msg
   sys_cmd_msg_to_motor.msg
   sensor_foot_pressure_msg.msg
@@ -166,6 +167,9 @@ add_executable(system_pot src/system_pot.cpp src/port.c src/user_time.c)
 add_dependencies(system_pot ${catkin_EXPORTED_TARGETS})
 target_link_libraries(system_pot  ${catkin_LIBRARIES} )
 
+add_executable(system_node src/system_node.cpp src/port.c src/user_time.c)
+add_dependencies(system_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(system_node  ${catkin_LIBRARIES} )
 #############
 ## Install ##
 #############

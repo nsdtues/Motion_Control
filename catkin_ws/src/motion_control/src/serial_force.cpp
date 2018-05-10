@@ -161,7 +161,7 @@ void serial_read_loop(void)
 			force_t = 0;
 		}
         
-        if((force_t < 0)&&(force_t > PROTECTION_FORCE_VALUE)){
+        if((force_t < 0)||(force_t > PROTECTION_FORCE_VALUE)){
 			//EnableFlag = MOTOR_EN_FALSE;
         }
         

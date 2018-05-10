@@ -57,4 +57,8 @@
 
 #define CHANGE_PRELOAD_POSITION 1   				//0 不启用  1 启用    自适应调整预紧力位置
 
+#define MOTION_MODE_GAIT 1
+#define MOTION_MODE_FIXED 2
+#define MOTION_MODE_RELAX 3
+
 #endif

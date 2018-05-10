@@ -8,6 +8,7 @@
 
 int MotorPort;
 uint32_t force;
+
 void force_callback(const motion_control::msg_serial_force& force_input)
 {
 	std::string serial_force_state;
