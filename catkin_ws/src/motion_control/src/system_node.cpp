@@ -196,10 +196,10 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "system_node");
     ros::NodeHandle nh;
 	
-	pub_msg_motion_cmd = nh.advertise<motion_control::msg_motion_cmd>("msg_motion_cmd",50,true);
-	pub_node_motor_msg_to_sys = nh.advertise<motion_control::msg_motion_cmd>("node_motor_msg_to_sys",50,true);
-	ros::Subscriber sub_sys_cmd_msg_to_motor = nh.subscribe("sys_cmd_msg_to_motor", 50, sys_cmd_msg_to_motor_callback);
-	ros::Subscriber msg_motion_evt = nh.subscribe("msg_motion_evt", 50, msg_motion_evt_callback);
+	pub_msg_motion_cmd = nh.advertise<motion_control::msg_motion_cmd>("msg_motion_cmd",1,true);
+	pub_node_motor_msg_to_sys = nh.advertise<motion_control::msg_motion_cmd>("node_motor_msg_to_sys",1,true);
+	ros::Subscriber sub_sys_cmd_msg_to_motor = nh.subscribe("sys_cmd_msg_to_motor", 1, sys_cmd_msg_to_motor_callback);
+	ros::Subscriber msg_motion_evt = nh.subscribe("msg_motion_evt", 1, msg_motion_evt_callback);
 	boost::thread motion_cmd_pub(&motion_cmd_pub_loop);
 	
 	

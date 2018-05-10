@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "serial_force");
 	ros::NodeHandle nh;
 	
-	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",50,true);
+	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",1,true);
 	
 	boost::thread serial_read(&serial_read_loop);
 	

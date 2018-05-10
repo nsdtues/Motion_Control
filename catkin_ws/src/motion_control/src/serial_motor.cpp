@@ -808,11 +808,11 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "serial_motor");
     ros::NodeHandle nh;
 	
-	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",50,true);
-	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 50, force_callback);
-	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 50, pot_callback);
-	ros::Subscriber sub_motion_cmd = nh.subscribe("node_motor_msg_to_sys", 50, motion_cmd_callback);
-	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 50, gait_callback);
+	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",1,true);
+	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 1, force_callback);
+	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 1, pot_callback);
+	ros::Subscriber sub_motion_cmd = nh.subscribe("node_motor_msg_to_sys", 1, motion_cmd_callback);
+	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 1, gait_callback);
 	boost::thread motor_ctrl(&motor_ctrl_loop);
 	
 	
