@@ -8,6 +8,7 @@
 #include "motion_control/msg_serial_force.h"
 #include "motion_control/msg_serial_pot.h"
 #include "motion_control/msg_motion_cmd.h"
+#include "motion_control/msg_motion_evt.h"
 #include "motion_control/msg_gait.h"
 #include "predefinition.h"
 
@@ -15,11 +16,13 @@ boost::interprocess::interprocess_semaphore sys_cmd_semaphore(0);
 boost::interprocess::interprocess_semaphore pot_semaphore(0);
 boost::interprocess::interprocess_semaphore force_semaphore(0);
 
+ros::Publisher pub_msg_motion_evt;
+
 int MotorPort;
-uint32_t force;
-float pot;
+uint32_t force_now;
+float pot_now;
 int32_t EnableFlag = MOTOR_EN_TRUE;
-int32_t force_data_flag = 0,pot_data_flag = 0;
+int32_t force_data_flag = 0,pot_data_flag = 0,sys_cmd_flag = 0;
 int32_t gait_state;
 
 struct motion_cmd_t{
@@ -40,12 +43,72 @@ struct motion_cmd_t{
 	int32_t pid_umin;
 }motion_cmd_para;
 
+//驱动电机的接口，通过串口ASCII码的格式与驱动器通讯，通讯分两种
+//一种是带有参数的，需要将参数传入到para
+//不带参数的para传入NULL即可
+//shiki.h文件里有所需要的通讯格式的宏定义
+//返回为驱动器的反馈（v ***; ok; e **;）
+int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
+{
+    int32_t readcnt = 0,nread,nwrite;
+    char com[20];
+    uint8_t data[256],datagram[64];
+    int *p = para;
+    int try_cmd = 5;
+    int try_t = 1024;
+    struct motor_ctl_t temp;
+
+    if(para == NULL){
+        sprintf(com,msg,NULL);
+    }else{
+        sprintf(com,msg,*p);
+    }
+    while(try_cmd--){
+        nwrite = write(port,com,strlen(com));		//发送串口命令
+
+        memset(data,'\0',256);
+        while(try_t--){
+            nread = read(port,datagram,1);	//获取串口命令
+            if(nread<0){
+                return -1;
+            }
+            if(nread == 0){
+                printf("Communication fail\n");
+				//run_info
+                return -1;
+            }
+            data[readcnt] = datagram[0];
+            readcnt++;
+            if(datagram[0]==0x0D){	//最后一位为“\n”判断接收到最后一位后再处理数据
+                memcpy(temp.com,data,sizeof(data));
+                //			printf("rev = %s\n",temp.com);
+                if(strstr(temp.com,"v")!=0){
+
+                    sscanf(temp.com,"%*s%d",&temp.temp);
+                    if((void*)rev != NULL){
+                        memcpy(rev,&temp,sizeof(struct motor_ctl_t));
+                    }
+                    return 0;
+
+                }else if(strstr(temp.com,"e")!=0){
+                    sscanf(temp.com,"%*s%d",&temp.state);
+                    printf("motor error = %d\n",temp.state);
+					//run_info
+                    break;
+                }else if(strstr(temp.com,"ok")!=0){
+                    return 0;
+                }
+            }
+        }
+    }
+    return -1;
+}
 
 void force_callback(const motion_control::msg_serial_force& force_input)
 {
-	force = force_input.force;
+	force_now = force_input.force;
 	if(force_input.serial_force_state == SENSER_OUT_RANGE){
-		ROS_INFO("position out of range: [%f]\n", pot);
+		ROS_INFO("position out of range: [%u]\n", force_now);
 		EnableFlag = MOTOR_EN_FALSE;
 	}
 	
@@ -53,14 +116,14 @@ void force_callback(const motion_control::msg_serial_force& force_input)
 		force_semaphore.post();
 		force_data_flag = 1;
 	}	
-	ROS_INFO("force: [%d]\n", force);  
+	ROS_INFO("force_now: [%d]\n", force_now);  
 }
 
 void pot_callback(const motion_control::msg_serial_pot& pot_input)
 {
-	pot = pot_input.pot;
+	pot_now = pot_input.pot;
 	if(pot_input.serial_pot_state == SENSER_OUT_RANGE){
-		ROS_INFO("position out of range: [%f]\n", pot);
+		ROS_INFO("position out of range: [%f]\n", pot_now);
 		EnableFlag = MOTOR_EN_FALSE;
 	}
 	
@@ -68,27 +131,30 @@ void pot_callback(const motion_control::msg_serial_pot& pot_input)
 		pot_semaphore.post();
 		pot_data_flag = 1;
 	}	
-	ROS_INFO("pot: [%f]\n", pot);  
+	ROS_INFO("pot: [%f]\n", pot_now);  
 }
 
 void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 {
-	sys_cmd_semaphore.post();
 	motion_cmd_para.state = motion_cmd_input.state;
 	motion_cmd_para.mode = motion_cmd_input.mode;
 	motion_cmd_para.foot = motion_cmd_input.foot;
 	motion_cmd_para.forceaid = motion_cmd_input.forceaid;
-	motion_cmd_para.max_force = motion_cmd_input.max_force;
-	motion_cmd_para.max_position = motion_cmd_input.max_position;
-	motion_cmd_para.zero_position = motion_cmd_input.zero_position;
-	motion_cmd_para.preload_position = motion_cmd_input.preload_position;
-	motion_cmd_para.max_velocity = motion_cmd_input.max_velocity;
-	motion_cmd_para.max_pot = motion_cmd_input.max_pot;
-	motion_cmd_para.pid_kp = motion_cmd_input.pid_kp;
-	motion_cmd_para.pid_ki = motion_cmd_input.pid_ki;
-	motion_cmd_para.pid_umax = motion_cmd_input.pid_umax;
-	motion_cmd_para.pid_umin = motion_cmd_input.pid_umin;	
-	
+	if(sys_cmd_flag == 0){
+		motion_cmd_para.max_force = motion_cmd_input.max_force;
+		motion_cmd_para.max_position = motion_cmd_input.max_position;
+		motion_cmd_para.zero_position = motion_cmd_input.zero_position;
+		motion_cmd_para.preload_position = motion_cmd_input.preload_position;
+		motion_cmd_para.max_velocity = motion_cmd_input.max_velocity;
+		motion_cmd_para.nset_acc = motion_cmd_input.nset_acc;
+		motion_cmd_para.max_pot = motion_cmd_input.max_pot;
+		motion_cmd_para.pid_kp = motion_cmd_input.pid_kp;
+		motion_cmd_para.pid_ki = motion_cmd_input.pid_ki;
+		motion_cmd_para.pid_umax = motion_cmd_input.pid_umax;
+		motion_cmd_para.pid_umin = motion_cmd_input.pid_umin;
+		sys_cmd_flag = 1;
+		sys_cmd_semaphore.post();
+	}	
 }
 
 void gait_callback(const motion_control::msg_gait& gait_input)
@@ -121,23 +187,617 @@ void gait_callback(const motion_control::msg_gait& gait_input)
 
 void motor_ctrl_loop(void)
 {
-	struct timeval tv;
+    int MotorPort;
+    int deltav_motor=0,deltav_motor_old,motor_cmd_position,motor_cmd_velocity,max_position;
+    int i,nwrite,index,pndex,dndex,nset_acc,max_force_cnt,motor_speed_t,motor_speed_t_old;
+    uint32_t gait_state_temp,state_old=0,max_force;
+    uint32_t time_now,time_mark,init_position[10];
+    int32_t deltav_force=0,integral_force=0,init_force[10],deltav_force_old,derivative_force,delatv_preload = 0;
+    struct timeval tv;
     struct timespec ts;
+    int timeout = 1000,is_check = 0;
+    struct motor_ctl_t motor_position,motor_state,motor_speed,motor_current;
+    int32_t motion_cmd_state,motor_state_old=0;
 	
-	uint32_t time_now,time_mark;
+	motion_control::msg_motion_evt msg_motion_evt;
 	
-	gettimeofday(&tv,NULL);
-	time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//获取系统时间，单位为ms
+    MotorPort = tty_init(MOTOR_PORT_NUM);
+    if(MotorPort<0){
+		//run_info
+    }
+
+    int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
+    if(driver_init_resualt == 0){
+		//run_info
+    }	
+	
+#if(RUN_MOTION == REAL)
+    time_t log_time = time(NULL);
+    struct tm *log_tp = localtime(&log_time);
+    char log_path[32];
+
+    sprintf(log_path,"./motor_log/motor_log_%d_%02d_%02d_%02d%02d.txt",log_tp->tm_year + 1900,log_tp->tm_mon+1,log_tp->tm_mday,log_tp->tm_hour,log_tp->tm_min);
+    FILE *log_fp = fopen(log_path,"w");
+#endif	
 	
 	sys_cmd_semaphore.wait();
-	for(;;){
-		gettimeofday(&tv,NULL);
-		time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000); 
-		time_now = (time_now - time_mark)&0x000fffff;
-		ROS_INFO("time=%u force=%d\n",time_now , force);  
-		usleep(20000);
-	}
 	
+	for(;;){
+		max_position = motion_cmd_para.max_position;
+        deltav_motor_old = 0;
+        max_force_cnt = 0;		
+		gettimeofday(&tv,NULL);
+		time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//获取系统时间，单位为ms		
+		for(;;){
+			if(EnableFlag == MOTOR_EN_TRUE){
+				motion_cmd_state = motion_cmd_para.state;
+				switch(motion_cmd_state){
+					case CTL_CMDINITIAL:
+					    if((motor_state_old == 0)||(is_check == 0)){
+
+                        gettimeofday(&tv,NULL);
+                        ts.tv_sec = tv.tv_sec;
+                        ts.tv_nsec = tv.tv_usec*1000 + timeout*1000*1000;
+                        ts.tv_sec += ts.tv_nsec/(1000*1000*1000);
+                        ts.tv_nsec %= (1000*1000*1000);
+
+                        if(motor_state_old == 0){
+                            int ret1 = pot_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
+                            int ret2 = force_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
+                            printf("check reualt: %d %d\n",ret1,ret2);
+
+                            if((ret1 == 0)&&(ret2 == 0)){
+                                //check_info on checking
+                            }else{
+                                printf("motor module self check abort:can not get senser data\n");
+								msg_motion_evt.check_results = no_sensor_data;
+                                pub_msg_motion_evt.publish(msg_motion_evt);
+                                break;
+                            }
+                        }
+                        
+                        motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
+                        nwrite = motor_state.temp;
+                        motor_ctl(CLEAR_MOTOR_FUALT,&nwrite,NULL,MotorPort);
+
+                        nwrite = ABSOLUTE_MOVE;
+                        motor_ctl(SET_MOVE_MODE,&nwrite,NULL,MotorPort);
+
+                        nwrite = VELOCITY_MODE_MAX_ACC;
+                        motor_ctl(SET_VELOCITY_ACC,&nwrite,NULL,MotorPort);
+
+                        nwrite = VELOCITY_MODE_MAX_ACC;
+                        motor_ctl(SET_VELOCITY_DEC,&nwrite,NULL,MotorPort);
+
+                        nset_acc = motion_cmd_para.nset_acc;											//驱动器的最大加速度设置参数
+                        motor_ctl(SET_MAX_DEC,&nset_acc,NULL,MotorPort);
+                        nset_acc = motion_cmd_para.nset_acc;
+                        motor_ctl(SET_MAX_ACC,&nset_acc,NULL,MotorPort);
+
+                        motor_cmd_velocity = 200000;																		//设置运动速度为14000rpm 此参数需要可以配置
+                        motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+
+                        //寻零自检，循环次数超过400次认为无法达到
+                        int pot_value_try = 400;
+
+                        nwrite = ENABLE_POSITION_MODE;
+                        motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+
+                        while(pot_value_try--){
+
+
+                            motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+
+                            if((pot_now>(SELF_CHECK_POT_VALUE+0.02))||(pot_now<(SELF_CHECK_POT_VALUE-0.08))){
+#if(WHERE_MOTION == EXOSUIT_VERSION)
+                                motor_cmd_position = motor_position.temp + MOTOR_ENCODER_DIRECTION*(SELF_CHECK_POT_VALUE - pot_now)*10000;
+#elif(WHERE_MOTION == DESKTOP_VERSION)
+                                motor_cmd_position =motor_position.temp - (SELF_CHECK_POT_VALUE - pot_now)*10000;
+#endif
+                                motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                                motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+                                printf("what is pot: %f pot_value_try:%d\n",pot_now,pot_value_try);
+
+                            }else{
+                                motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
+                                nwrite = ENCODER_DEFUALT_POSITON;
+                                motor_ctl(SET_POSITION,&nwrite,NULL,MotorPort);
+                                printf("what is pot: %f try_cnt:%d\n",pot_now,400 - pot_value_try);
+                                break;
+                            }
+
+                        }
+
+                        if(pot_value_try <= 0){
+                            printf("motor module self check abort:can not reach zero position\n");
+							msg_motion_evt.check_results = unreachable_zero_position;
+                            pub_msg_motion_evt.publish(msg_motion_evt);		
+                            is_check = 1;
+                            break;
+                        }
+#if((RUN_MOTION == REAL)||(GAIT_B_MODE == STUDY_WALKING_POSITON))
+                        motor_cmd_velocity = 100000;
+                        motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+
+                        //预紧力点自适应，电位计位置超出或者循环超过1分钟，认为自检失败
+
+                        uint32_t init_mark;
+
+                        gettimeofday(&tv,NULL);
+                        init_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        init_mark = (init_mark - time_mark)&0x000fffff;
+
+                        while(1){
+							
+                            gettimeofday(&tv,NULL);
+                            time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                            time_now = (time_now - time_mark)&0x000fffff;
+
+                            if((pot>0.1)&&(pot<3.3)&&((time_now - init_mark) < 60000)){
+
+                            }else{
+                                printf("motor module self check abort:can not reach preload position\n");
+                                
+                                motor_cmd_position = motion_cmd_para.zero_position;
+                                motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                                motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+								msg_motion_evt.check_results = unreachable_preload_position;
+								pub_msg_motion_evt.publish(msg_motion_evt);	
+                                is_check = 1;
+                                break;
+                            }
+
+                            int32_t init_force_temp[10];
+                            uint32_t init_position_temp[10],init_position_overrange;
+
+                            motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+
+                            memcpy(init_force_temp,init_force+1,sizeof(init_force)-4);
+                            printf("init_temp = ");
+                            for(i=0;i<10;i++){
+                                printf("%d ",init_force_temp[i]);
+                            }
+                            printf("\n");
+                            memcpy(init_force,init_force_temp,sizeof(init_force)-4);
+                            init_force[9] = SELF_CHECK_FORCE_VALUE - force_now;
+                            printf("init_force = ");
+                            for(i=0;i<10;i++){
+                                printf("%d ",init_force[i]);
+                            }
+                            printf("\n");
+
+
+                            memcpy(init_position_temp,init_position+1,sizeof(init_position)-4);
+                            memcpy(init_position,init_position_temp,sizeof(init_position)-4);
+                            init_position[9] = motor_position.temp;
+                            printf("init_position = ");
+                            for(i=0;i<10;i++){
+                                printf("%d ",init_position[i]);
+                            }
+                            printf("\n");
+
+                            int init_ret;
+                            init_ret = 1;
+                            for(i=0;i<10;i++){
+                                if((abs(init_force[i]) - 20) < 0){
+                                    init_ret = init_ret&1;
+                                }else{
+                                    init_ret = init_ret&0;
+                                }
+                            }
+
+                            if(!init_ret){
+#if(WHERE_MOTION == EXOSUIT_VERSION)
+                                motor_cmd_position = motor_position.temp - MOTOR_ENCODER_DIRECTION*init_force[9]*100;
+#elif(WHERE_MOTION == DESKTOP_VERSION)
+                                motor_cmd_position =motor_position.temp - init_force[9]*100;
+#endif
+                                printf("what is motor_cmd_position = %d\n",motor_cmd_position);
+                                motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                                motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+                                printf("what is init_force = %d\n",init_force[9]);
+
+                            }else{
+                                motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
+                                for(i=0;i<10;i++){
+                                    init_position_overrange = init_position_overrange + init_position[i];
+                                }
+                                
+                                //根据测到的预紧力位置计算零位和最大位置
+                                delatv_preload = init_position_overrange/10 - motion_cmd_para.preload_position;
+                                motion_cmd_para.preload_position = delatv_preload + motion_cmd_para.preload_position;
+                                motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
+                                motion_cmd_para.max_position = delatv_preload + motion_cmd_para.max_position;
+                                max_position = motion_cmd_para.max_position;
+                                printf("what is preload_position = %d\n",motion_cmd_para.preload_position);
+                                break;
+                            }
+                        }
+
+                        if(is_check == 1){
+                            break;
+                        }
+
+#endif
+                        //自检成功配置参数
+
+                        motor_cmd_velocity = 1400000;																		//设置运动速度为14000rpm 此参数需要可以配置
+                        motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+
+                        //motor_cmd_position = motion_cmd_para.zero_position;
+                        motor_cmd_position = motion_cmd_para.preload_position;
+                        motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                        motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+						msg_motion_evt.check_results = module_check_success;
+                        pub_msg_motion_evt.publish(msg_motion_evt);	
+                        is_check = 1;;
+                        printf("motion module selfcheck ok\n");
+                    }else if((is_check == 1)&&(motor_state_old!=CTL_CMDINITIAL)){
+                        is_check = 0;
+                    }else{
+                        usleep(200000);
+                    }
+                    break;
+                case CTL_CMDPOWERDOWN:																				//关机
+
+                    nwrite = DISABLE_MOTOR;
+                    motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+					msg_motion_evt.check_results = module_check_success;
+                    pub_msg_motion_evt.publish(msg_motion_evt);	
+                    return;
+                    break;	
+
+                case CTL_CMDMOTIONSLEEP:																		//停机
+
+                    if(motion_cmd_state != motor_state_old){
+                        nwrite = ENABLE_POSITION_MODE;
+                        motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+
+                        motor_cmd_position = motion_cmd_para.zero_position;
+                        motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                        motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+						msg_motion_evt.check_results = module_check_success;
+                        pub_msg_motion_evt.publish(msg_motion_evt);	
+                    }else{
+                        usleep(200000);
+                    }
+                    break;
+					
+                case CTL_CMDMOTIONSTOP:																						//停止
+
+                    if(motion_cmd_state != motor_state_old){
+
+					    motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
+                        nwrite = motor_state.temp;
+                        motor_ctl(CLEAR_MOTOR_FUALT,&nwrite,NULL,MotorPort);
+
+                        nwrite = DISABLE_MOTOR;
+                        motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+						msg_motion_evt.check_results = module_check_success;
+                        pub_msg_motion_evt.publish(msg_motion_evt);	
+                    }else{
+                        usleep(200000);
+                    }
+                    break;
+
+                case CTL_CMDMOTIONSTART:																					//开始工作
+                    if(motion_cmd_state != motor_state_old){						
+                        nwrite = ENABLE_POSITION_MODE;
+                        motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+						msg_motion_evt.check_results = module_check_success;
+                        pub_msg_motion_evt.publish(msg_motion_evt);	
+                    }
+
+#if(GAIT_B_MODE == STUDY_WALKING_POSITON)
+                    gait_state = 2;
+#endif
+					gait_state_temp = gait_state;
+                    switch(gait_state_temp){
+                    case 01:																//预紧点，不能是单个位置点，需要在合适的步态和力矩下开始运动
+                        if(gait_state_temp != state_old){
+
+                            integral_force = 0;
+
+                            motor_cmd_velocity = 1400000;																		//设置运动速度为14000rpm 此参数需要可以配置
+                            motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+                            
+                            nwrite = ENABLE_POSITION_MODE;
+                            motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+
+                            motor_cmd_position = motion_cmd_para.preload_position;
+                            motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                            motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+                        }
+                        motor_ctl(GET_CURRENT,NULL,&motor_current,MotorPort);
+                        motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+
+                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
+#elif(RUN_MOTION == REAL)
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+#endif
+                        break;
+
+                    case 02:																//拉扯阶段，此阶段需要快速。因此将此阶段分为两段，一段是直接快速运动，当靠近最大位置时再引入力矩环
+
+#if(GAIT_B_MODE==STUDY_WALKING_POSITON)					
+                        if(gait_state_temp != state_old){
+                            motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
+                            nwrite = ENABLE_VELOCITY_MODE;
+                            motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+                        }
+
+                        motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+                        deltav_force = 220 - force_now;
+                        motor_speed_t = -10000*deltav_force;
+
+                        if((deltav_force < 10)&&(deltav_force >-10)){
+                            motor_speed_t = 0;
+                        }
+
+                        motor_ctl(SET_VELOCITY_MODE_SPEED,&motor_speed_t,NULL,MotorPort);
+
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+                        printf("UTC=%d.%d time=%u force=%d position=%d\n",tv.tv_sec,tv.tv_usec,time_now,force_now,motor_position.temp);
+                        break;
+
+#endif					
+
+
+#if(GAIT_B_MODE==PULL_FORCE_TORQUE_TEST)
+                        if(gait_state_temp != state_old){
+                            motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
+
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;
+                            motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+
+                            nwrite = ENABLE_VELOCITY_MODE;
+                            motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+                        }
+                        motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
+                        deltav_force = motion_cmd_para.max_force*motion_cmd_para.forceaid - force_now;
+                        motor_speed_t = motor_speed.temp - deltav_force*1200;
+
+                        if(pot_now > 2.3){
+                            if(motor_speed_t < 0){
+                                motor_speed_t = 0;
+                            }
+                        }
+
+                        if(pot_now < 0.3){
+                            motor_speed_t = 0;
+                        }
+
+                        if(motor_speed_t < -1600000){															//根据不同的人，设置不同的速度？
+                            motor_speed_t = -1600000;
+                        }
+
+                        if(motor_speed_t > 1600000){
+                            motor_speed_t = 1600000;
+                        }
+                        printf("what is para %d %d %d %f\n",motor_speed_t,deltav_force,motor_speed.temp,pot_now);
+                        motor_ctl(SET_VELOCITY_MODE_SPEED,&motor_speed_t,NULL,MotorPort);
+                        motor_position.temp = ((2.61 - pot_now)/2.31)*35000;
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
+#if(RUN_MOTION == REAL)
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+#endif
+                        break;
+#endif          //PULL_FORCE_TORQUE_TEST
+
+#if(GAIT_B_MODE==PULL_FORCE_TORQUE)
+
+                        if(gait_state_temp != state_old){
+
+                            motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
+
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//设置运动速度为14000rpm 此参数需要可以配置
+                            motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+                            
+                            nwrite = ENABLE_VELOCITY_MODE;
+                            motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+                        }
+
+                        motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+                        //motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
+
+                        deltav_force = motion_cmd_para.max_force*motion_cmd_para.forceaid - force_now;
+
+                        if(deltav_motor > motion_cmd_para.pid_umax){
+                            if(abs(deltav_force) > 200){
+                                index = 0;
+                            }else{
+                                index = 1;
+                                if(deltav_force < 0){
+                                    integral_force = integral_force + deltav_force;
+                                }
+                            }
+                        }else if(deltav_motor < motion_cmd_para.pid_umin){
+                            if(abs(deltav_force) > 200){
+                                index = 0;
+                            }else{
+                                index = 1;
+                                if(deltav_force > 0){
+                                    integral_force = integral_force + deltav_force;
+                                }
+                            }
+                        }else{
+                            if(abs(deltav_force) > 200){
+                                index = 0;
+                            }else{
+                                index = 1;
+                                integral_force = integral_force + deltav_force;
+                            }
+                        }
+
+                        if(abs(deltav_force) < 10){
+                            pndex = 0;
+                        }else{
+                            pndex = motion_cmd_para.pid_kp;	//1000
+                        }
+
+                        index = motion_cmd_para.pid_ki*index;
+
+                        derivative_force = deltav_force_old - deltav_force;
+#if(WHERE_MOTION == EXOSUIT_VERSION)
+                        motor_speed_t = 0-MOTOR_ENCODER_DIRECTION*(deltav_force*pndex + index*integral_force - derivative_force*0);
+#elif(WHERE_MOTION == DESKTOP_VERSION)
+                        motor_speed_t = 0-(deltav_force*pndex + index*integral_force - derivative_force*0);
+#endif
+
+                        if(motor_speed_t > VELOCITY_MODE_MAX_SPEED)
+                            motor_speed_t = VELOCITY_MODE_MAX_SPEED;
+                        if(motor_speed_t < -VELOCITY_MODE_MAX_SPEED)
+                            motor_speed_t = -VELOCITY_MODE_MAX_SPEED;
+
+                        if(motor_position.temp < motion_cmd_para.max_position - MAX_POSITION_ADJUST ){
+                            if(motor_speed_t  < 0){
+                                motor_speed_t = 0;
+                            }
+                        }
+
+                        motor_ctl(SET_VELOCITY_MODE_SPEED,&motor_speed_t,NULL,MotorPort);
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))						
+                        motor_ctl(GET_CURRENT,NULL,&motor_current,MotorPort);
+#endif
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+
+                        deltav_force_old = deltav_force;
+                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,motor_speed_t,motor_current.temp);
+#elif(RUN_MOTION == REAL)
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,motor_speed_t);
+#endif
+                        break;
+
+#endif // (GAIT_B_MODE==PULL_FORCE_TORQUE)
+
+#if(GAIT_B_MODE==PULL_FIX_POSITION)
+
+                        if(gait_state_temp != state_old){
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//设置运动速度为14000rpm 此参数需要可以配置
+                            motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+                            motor_cmd_position = max_position;
+                            motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                            motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+                        }
+
+                        motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))						
+                        motor_ctl(GET_CURRENT,NULL,&motor_current,MotorPort);
+#endif						
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+
+                        if(abs(motor_position.temp - motor_cmd_position) < 100){
+                            max_force = max_force + force_now;
+                            max_force_cnt++;
+                        }
+
+                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
+#elif(RUN_MOTION == REAL)
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+#endif
+                        break;
+
+#endif // (GAIT_B_MODE==PULL_FIX_POSITION)
+
+                    case 03:					//回归零点，这个阶段就是快速就够了
+                        if(gait_state_temp != state_old){
+
+                            integral_force = 0;
+
+                            motor_cmd_velocity = 1400000;																		//设置运动速度为14000rpm 此参数需要可以配置
+                            motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
+                            
+                            nwrite = ENABLE_POSITION_MODE;
+                            motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+
+                            motor_cmd_position = motion_cmd_para.zero_position;
+                            motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
+                            motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+
+                            motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
+							//run info motor state
+                        }
+
+                        motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))						
+                        motor_ctl(GET_CURRENT,NULL,&motor_current,MotorPort);
+#endif						
+                        motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+                        //printf("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
+                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+#if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
+#elif(RUN_MOTION == REAL)
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+#endif                     
+                        break;
+                    default:
+                        usleep(10000);
+                        break;
+                    }
+
+#if(GAIT_B_MODE==PULL_FIX_POSITION)
+
+                    if((gait_state_temp == 1)&&(state_old == 3)&&(max_force_cnt != 0)){
+
+                        gettimeofday(&tv,NULL);
+                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
+                        time_now = (time_now - time_mark)&0x000fffff;
+
+                        max_force = (uint32_t)(max_force/max_force_cnt);
+                        deltav_force = motion_cmd_para.max_force - max_force;
+                        max_position = max_position - deltav_force*2;
+
+                        if(max_position < motion_cmd_para.max_position - MAX_POSITION_ADJUST){
+                            max_position = motion_cmd_para.max_position - MAX_POSITION_ADJUST;
+                        }else if(max_position > motion_cmd_para.max_position + MAX_POSITION_ADJUST){
+                            max_position = motion_cmd_para.max_position + MAX_POSITION_ADJUST;
+                        }
+
+                        max_force = 0;
+                        max_force_cnt = 0;
+                    }
+
+#endif // (GAIT_B_MODE==PULL_FIX_POSITION)
+                    state_old = gait_state_temp;
+                    break;
+                default:
+                    usleep(100000);
+                    break;
+                }
+                motor_state_old = motion_cmd_state;
+            }else{
+                nwrite = DISABLE_MOTOR;
+                motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
+                usleep(100000);
+            }
+		}
+	}
+#if(RUN_MOTION == REAL)
+    fclose(log_fp);
+#endif
+    close(MotorPort);	
 }
 
 
@@ -148,7 +808,7 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "serial_motor");
     ros::NodeHandle nh;
 	
-	
+	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",50,true);
 	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 50, force_callback);
 	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 50, pot_callback);
 	ros::Subscriber sub_motion_cmd = nh.subscribe("node_motor_msg_to_sys", 50, motion_cmd_callback);
