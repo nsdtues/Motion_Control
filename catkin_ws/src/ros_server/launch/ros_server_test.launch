@@ -1,0 +1,8 @@
+<launch>
+  <node pkg="ros_server" type="add_two_ints_server" name="add_two_ints_server_node" />
+  <node pkg="ros_server" type="add_two_ints_client" name="add_two_ints_client_node" args="123 45" >
+    <rosparam command="load" file="$(find ros_server)/params/ros_server.yaml" />
+  </node>
+
+</launch>
+

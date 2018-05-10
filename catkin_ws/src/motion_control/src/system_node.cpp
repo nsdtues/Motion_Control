@@ -13,8 +13,6 @@
 #include "motion_control/msg_motion_evt.h"
 #include "predefinition.h"
 
-sem_t sem_sub;
-sem_t sem_pub;
 
 boost::interprocess::interprocess_semaphore sub_semaphore(0);
 boost::interprocess::interprocess_semaphore pub_semaphore(0);
@@ -40,8 +38,7 @@ void sys_cmd_msg_to_motor_callback(const motion_control::sys_cmd_msg_to_motor& c
 
 void msg_motion_evt_callback(const motion_control::msg_motion_evt& evt_input)
 {
-	motor_check_results = evt_input.check_results;
-	sem_post(&sem_pub);		
+	motor_check_results = evt_input.check_results;		
 	pub_semaphore.post();
 }
 
