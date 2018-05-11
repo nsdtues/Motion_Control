@@ -38,8 +38,7 @@ void pot_pub_loop(void){
     }else{
         pot_mid = (pot_x + pot_y)/2;
     }
-	
-	
+		
 	sub_semaphore.wait();
 	
 	msg_serial_pot.serial_pot_state = SENSER_OK;
@@ -67,7 +66,7 @@ void pot_pub_loop(void){
 			msg_serial_pot.serial_pot_state = SENSER_OUT_RANGE;
         }		
 		msg_serial_pot.pot = pot_t;
-		pub_msg_pot.publish(msg_serial_pot);		
+		pub_msg_pot.publish(msg_serial_pot);
 	}	
 }
 
@@ -78,7 +77,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 	
 	pub_msg_pot = nh.advertise<motion_control::msg_serial_pot>("msg_serial_pot",1,true);
-	ros::Subscriber sub_position = nh.subscribe("sersor_position_msg", 1, position_callback);
+	ros::Subscriber sub_position = nh.subscribe("sensor_position_msg", 1, position_callback);
 	boost::thread pot_pub(&pot_pub_loop);
 	
 	

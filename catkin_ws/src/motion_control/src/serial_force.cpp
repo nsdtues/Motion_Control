@@ -14,6 +14,11 @@ ros::Publisher pub_msg_force;
 //获取力传感器数据，一帧的格式为 帧头：0x53 数据：0x** 0x** 校验：两个数据的与 帧尾：0x59
 int get_force(int port,uint32_t *msg)
 {
+	while(1){
+		usleep(1000);
+		*msg = 200;
+		return 0;
+	}
 
     int32_t 		readcnt = 0,nread,ncheck=0,state = 0;
     uint8_t			data[256],datagram[64];
@@ -133,8 +138,8 @@ void serial_read_loop(void)
 	int i;
 	uint32_t force_t;
 		
-    FrocePort = tty_init(FORCE_PORT_NUM);
-	driver_init(FrocePort,FORCE_PORT_NUM);
+    // FrocePort = tty_init(FORCE_PORT_NUM);
+	// driver_init(FrocePort,FORCE_PORT_NUM);
 	
     int ret = get_force(FrocePort,&force_temp[0]);
     if(ret == -1){
@@ -167,6 +172,7 @@ void serial_read_loop(void)
         
 		msg_serial_force.force = force_t;
 		pub_msg_force.publish(msg_serial_force);
+		ROS_INFO("pub force data");
 	}
 }
 

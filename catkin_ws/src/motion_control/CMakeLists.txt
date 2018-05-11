@@ -171,6 +171,10 @@ target_link_libraries(system_pot  ${catkin_LIBRARIES} )
 add_executable(system_node src/system_node.cpp src/port.c src/user_time.c)
 add_dependencies(system_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(system_node  ${catkin_LIBRARIES} )
+
+add_executable(test_node_system src/test_node_system.cpp)
+add_dependencies(test_node_system ${catkin_EXPORTED_TARGETS})
+target_link_libraries(test_node_system  ${catkin_LIBRARIES} )
 #############
 ## Install ##
 #############

@@ -83,7 +83,7 @@ void motion_cmd_pub_loop(void)
 			
 				
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-				if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(120))){
+				if(pub_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(120))){
 					if(msg_motion_evt.check_results == module_check_success){
 						node_motor_msg_to_sys.evt = "initialsuccess";
 					}else{
@@ -101,7 +101,7 @@ void motion_cmd_pub_loop(void)
                 msg_motion_cmd.state = CTL_CMDPOWERDOWN;
 
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "shutdownsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "shutdownerror";
@@ -115,7 +115,7 @@ void motion_cmd_pub_loop(void)
                 msg_motion_cmd.state = CTL_CMDMOTIONSTOP;
 
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
-                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "stopsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "stoperrorID";
@@ -130,7 +130,7 @@ void motion_cmd_pub_loop(void)
 
                 pub_msg_motion_cmd.publish(msg_motion_cmd);
 
-                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "pausesuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "pausesuccess";
@@ -146,7 +146,7 @@ void motion_cmd_pub_loop(void)
 
                 pub_msg_motion_cmd.publish(msg_motion_cmd);
 
-                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(10))){
+                if(pub_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(10))){
 					node_motor_msg_to_sys.evt = "motorstartsuccess";
                 }else{
 					node_motor_msg_to_sys.evt = "starterrorID";
@@ -197,7 +197,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 	
 	pub_msg_motion_cmd = nh.advertise<motion_control::msg_motion_cmd>("msg_motion_cmd",1,true);
-	pub_node_motor_msg_to_sys = nh.advertise<motion_control::msg_motion_cmd>("node_motor_msg_to_sys",1,true);
+	pub_node_motor_msg_to_sys = nh.advertise<motion_control::node_motor_msg_to_sys>("node_motor_msg_to_sys",1,true);
 	ros::Subscriber sub_sys_cmd_msg_to_motor = nh.subscribe("sys_cmd_msg_to_motor", 1, sys_cmd_msg_to_motor_callback);
 	ros::Subscriber msg_motion_evt = nh.subscribe("msg_motion_evt", 1, msg_motion_evt_callback);
 	boost::thread motion_cmd_pub(&motion_cmd_pub_loop);

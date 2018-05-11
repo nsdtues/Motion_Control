@@ -1,6 +1,7 @@
 //serial_motor.cpp  
 //创建于 2018年5月3日
 //更新于 2018年5月3日
+//source ~/Motion_Control/catkin_ws/devel/setup.bash
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
 #include "boost/interprocess/sync/interprocess_semaphore.hpp"
@@ -50,6 +51,10 @@ struct motion_cmd_t{
 //返回为驱动器的反馈（v ***; ok; e **;）
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 {
+	while(1){
+		return 0;
+	}
+	
     int32_t readcnt = 0,nread,nwrite;
     char com[20];
     uint8_t data[256],datagram[64];
@@ -201,15 +206,15 @@ void motor_ctrl_loop(void)
 	
 	motion_control::msg_motion_evt msg_motion_evt;
 	
-    MotorPort = tty_init(MOTOR_PORT_NUM);
-    if(MotorPort<0){
-		//run_info
-    }
+    // MotorPort = tty_init(MOTOR_PORT_NUM);
+    // if(MotorPort<0){
+		// //run_info
+    // }
 
-    int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
-    if(driver_init_resualt == 0){
-		//run_info
-    }	
+    // int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
+    // if(driver_init_resualt == 0){
+		// //run_info
+    // }	
 	
 #if(RUN_MOTION == REAL)
     time_t log_time = time(NULL);
@@ -242,8 +247,8 @@ void motor_ctrl_loop(void)
                         ts.tv_nsec %= (1000*1000*1000);
 
                         if(motor_state_old == 0){
-                            int ret1 = pot_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
-                            int ret2 = force_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
+                            int ret1 = pot_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(1));
+                            int ret2 = force_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(1));
                             printf("check reualt: %d %d\n",ret1,ret2);
 
                             if((ret1 == 0)&&(ret2 == 0)){
@@ -760,7 +765,6 @@ void motor_ctrl_loop(void)
 #if(GAIT_B_MODE==PULL_FIX_POSITION)
 
                     if((gait_state_temp == 1)&&(state_old == 3)&&(max_force_cnt != 0)){
-
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
@@ -774,7 +778,6 @@ void motor_ctrl_loop(void)
                         }else if(max_position > motion_cmd_para.max_position + MAX_POSITION_ADJUST){
                             max_position = motion_cmd_para.max_position + MAX_POSITION_ADJUST;
                         }
-
                         max_force = 0;
                         max_force_cnt = 0;
                     }
@@ -811,7 +814,7 @@ int main(int argc, char **argv)
 	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",1,true);
 	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 1, force_callback);
 	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 1, pot_callback);
-	ros::Subscriber sub_motion_cmd = nh.subscribe("node_motor_msg_to_sys", 1, motion_cmd_callback);
+	ros::Subscriber sub_motion_cmd = nh.subscribe("msg_motion_cmd", 1, motion_cmd_callback);
 	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 1, gait_callback);
 	boost::thread motor_ctrl(&motor_ctrl_loop);
 	
