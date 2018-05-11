@@ -21,13 +21,14 @@ ros::Publisher pub_msg_motion_cmd;
 ros::Publisher pub_node_motor_msg_to_sys;
 
 motion_control::msg_motion_evt msg_motion_evt;
+motion_control::msg_motion_cmd msg_motion_cmd;
 
 std::string motion_state;
 uint32_t motor_check_results;
 
 void get_default_settings(void)
 {
-    return;
+
 }
 
 void sys_cmd_msg_to_motor_callback(const motion_control::sys_cmd_msg_to_motor& cmd_input)
@@ -47,7 +48,6 @@ void motion_cmd_pub_loop(void)
 {
 	boost::posix_time::ptime tv;
 	
-	motion_control::msg_motion_cmd msg_motion_cmd;
 	motion_control::node_motor_msg_to_sys node_motor_msg_to_sys;	
 	
 #if(((RUN_MOTION == REAL)&&(WHERE_MOTION == EXOSUIT_VERSION))||(SYSTEM_CLIENT_TEST == SYSTEM_ON))
