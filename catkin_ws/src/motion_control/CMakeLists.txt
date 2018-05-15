@@ -171,6 +171,14 @@ target_link_libraries(system_pot  ${catkin_LIBRARIES} )
 add_executable(system_node src/system_node.cpp src/port.c src/user_time.c)
 add_dependencies(system_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(system_node  ${catkin_LIBRARIES} )
+
+#add_executable(motor_control_node src/motor_control_node.cpp src/motor_control.cpp)
+#add_dependencies(motor_control_node ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(motor_control_node  ${catkin_LIBRARIES} )
+
+add_executable(thread_test_node src/thread_test.cpp)
+add_dependencies(thread_test_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(thread_test_node  ${catkin_LIBRARIES} )
 #############
 ## Install ##
 #############
