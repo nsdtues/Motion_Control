@@ -3,3 +3,4 @@ catkin_ws/devel/
 catkin_ws/.catkin_workspace
 catkin_ws/build-src-Desktop-Default/
 catkin_ws/src/CMakeLists.txt.user
+catkin_ws/src/motion_control/src/*.pyc

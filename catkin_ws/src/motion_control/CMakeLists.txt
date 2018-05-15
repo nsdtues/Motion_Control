@@ -60,6 +60,7 @@ add_message_files(
   sensor_foot_pressure_msg.msg
   sensor_position_msg.msg
   msg_gait.msg
+  motion_module_defualt_para.msg
   # Message2.msg
 )
 

@@ -11,6 +11,7 @@
 #include "motion_control/sys_cmd_msg_to_motor.h"
 #include "motion_control/node_motor_msg_to_sys.h"
 #include "motion_control/msg_motion_evt.h"
+#include "motion_control/motion_module_defualt_para.h"
 #include "predefinition.h"
 
 
@@ -26,10 +27,23 @@ motion_control::msg_motion_cmd msg_motion_cmd;
 std::string motion_state;
 uint32_t motor_check_results;
 
-void get_default_settings(void)
+void msg_motion_para_callback(const motion_control::motion_module_defualt_para& para_input)
 {
-
+	msg_motion_cmd.foot = para_input.foot;
+	msg_motion_cmd.forceaid = para_input.forceaid;
+	msg_motion_cmd.max_force = para_input.max_force;
+	msg_motion_cmd.max_position = para_input.max_position;
+	msg_motion_cmd.zero_position = para_input.zero_position;
+	msg_motion_cmd.preload_position = para_input.preload_position;
+	msg_motion_cmd.max_velocity = para_input.max_velocity;
+	msg_motion_cmd.nset_acc = para_input.nset_acc;
+	msg_motion_cmd.max_pot = para_input.max_pot;
+	msg_motion_cmd.pid_kp = para_input.pid_kp;
+	msg_motion_cmd.pid_ki = para_input.pid_ki;
+	msg_motion_cmd.pid_umax = para_input.pid_umax;
+	msg_motion_cmd.pid_umin = para_input.pid_umin;	
 }
+
 
 void sys_cmd_msg_to_motor_callback(const motion_control::sys_cmd_msg_to_motor& cmd_input)
 {
@@ -51,14 +65,12 @@ void motion_cmd_pub_loop(void)
 	motion_control::node_motor_msg_to_sys node_motor_msg_to_sys;	
 	
 #if(((RUN_MOTION == REAL)&&(WHERE_MOTION == EXOSUIT_VERSION))||(SYSTEM_CLIENT_TEST == SYSTEM_ON))
-    get_default_settings();
-    msg_motion_cmd.forceaid = 3;
+	
 #endif
 
 #if(((RUN_MOTION == DEBUG)||(WHERE_MOTION == DESKTOP_VERSION))&&(SYSTEM_CLIENT_TEST == SYSTEM_OFF))
     msg_motion_cmd.state = CTL_CMDINITIAL;
-    get_default_settings();
-	msg_motion_cmd.forceaid = 3;
+
 
 	pub_msg_motion_cmd.publish(msg_motion_cmd);
 	
@@ -200,6 +212,7 @@ int main(int argc, char **argv)
 	pub_node_motor_msg_to_sys = nh.advertise<motion_control::node_motor_msg_to_sys>("node_motor_msg_to_sys",1,true);
 	ros::Subscriber sub_sys_cmd_msg_to_motor = nh.subscribe("sys_cmd_msg_to_motor", 1, sys_cmd_msg_to_motor_callback);
 	ros::Subscriber msg_motion_evt = nh.subscribe("msg_motion_evt", 1, msg_motion_evt_callback);
+	ros::Subscriber msg_motion_para = nh.subscribe("defualt_para", 1, msg_motion_para_callback);
 	boost::thread motion_cmd_pub(&motion_cmd_pub_loop);
 	
 	
