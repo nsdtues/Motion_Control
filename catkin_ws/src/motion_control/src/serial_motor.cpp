@@ -47,7 +47,7 @@ struct motion_cmd_t{
 //驱动电机的接口，通过串口ASCII码的格式与驱动器通讯，通讯分两种
 //一种是带有参数的，需要将参数传入到para
 //不带参数的para传入NULL即可
-//shiki.h文件里有所需要的通讯格式的宏定义
+//motion_control.h文件里有所需要的通讯格式的宏定义
 //返回为驱动器的反馈（v ***; ok; e **;）
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 {
