@@ -9,7 +9,7 @@
 #define MOTION_ADJUST_MM 10									//自适应对应的最大调制位置 mm
 
 
-#define WHERE_MOTION EXOSUIT_VERSION
+#define WHERE_MOTION DESKTOP_VERSION
 
 #if(WHERE_MOTION == EXOSUIT_VERSION)
 #define SELF_CHECK_POT_VALUE 2.5
@@ -20,8 +20,8 @@
 #endif
 
 #if(WHERE_MOTION == DESKTOP_VERSION)
-#define SELF_CHECK_POT_VALUE 0.3					//自检到达的位置
-#define ENCODER_DEFUALT_POSITON 35000				//自检设置的编码器取值
+#define SELF_CHECK_POT_VALUE 0.45					//自检到达的位置
+#define ENCODER_DEFUALT_POSITON 30000				//自检设置的编码器取值
 #endif
 
 #define VELOCITY_MODE_MAX_SPEED 1500000			

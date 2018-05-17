@@ -5,21 +5,18 @@
 #include "boost/thread.hpp"
 #include <ros/ros.h>
 #include "motion_control/msg_serial_force.h"
+#include "motion_control/motion_run_info_msg.h"
 #include "predefinition.h"
 
 int FrocePort;
 ros::Publisher pub_msg_force;
+ros::Publisher pub_motion_run_info_msg;
 
+motion_control::motion_run_info_msg motion_run_info_msg;
 
 //获取力传感器数据，一帧的格式为 帧头：0x53 数据：0x** 0x** 校验：两个数据的与 帧尾：0x59
 int get_force(int port,uint32_t *msg)
 {
-	while(1){
-		usleep(1000);
-		*msg = 200;
-		return 0;
-	}
-
     int32_t 		readcnt = 0,nread,ncheck=0,state = 0;
     uint8_t			data[256],datagram[64];
     float	  		adc_temp;
@@ -59,11 +56,10 @@ int get_force(int port,uint32_t *msg)
 
                     state = 0;
                     readcnt = 0;
-
-                    // pthread_mutex_lock(&mutex_info);
-                    // motor_module_run_info.force_senser_error++;		//校验错误，收集错误信息
-                    // pthread_mutex_unlock(&mutex_info);
-
+					
+					motion_run_info_msg.error_log++;				//校验错误，收集错误信息
+					pub_motion_run_info_msg.publish(motion_run_info_msg);
+					
                     break;
                 }
             }
@@ -81,9 +77,8 @@ int get_force(int port,uint32_t *msg)
                 state = 0;
                 readcnt= 0;
 
-                // pthread_mutex_lock(&mutex_info);
-                // motor_module_run_info.force_senser_error++;		//校验错误，收集错误信息
-                // pthread_mutex_unlock(&mutex_info);
+				motion_run_info_msg.error_log++;				//校验错误，收集错误信息
+				pub_motion_run_info_msg.publish(motion_run_info_msg);
 
                 break;
             }
@@ -138,14 +133,28 @@ void serial_read_loop(void)
 	int i;
 	uint32_t force_t;
 		
-    // FrocePort = tty_init(FORCE_PORT_NUM);
-	// driver_init(FrocePort,FORCE_PORT_NUM);
+    FrocePort = tty_init(FORCE_PORT_NUM);
+	
+    if(FrocePort<0){
+		msg_serial_force.serial_force_state = SENSER_NO_PORT;
+		motion_run_info_msg.state = "can not open /dev/ttyUSBforce";
+        motion_run_info_msg.error_log++;
+		pub_motion_run_info_msg.publish(motion_run_info_msg);		
+    }	
+	
+	driver_init(FrocePort,FORCE_PORT_NUM);
+	// ROS_INFO("open serial force ok");
 	
     int ret = get_force(FrocePort,&force_temp[0]);
     if(ret == -1){
 		msg_serial_force.serial_force_state = SENSER_NO_DATA;
+		motion_run_info_msg.state = "force sensor no data";
+		motion_run_info_msg.error_log++;
+		pub_motion_run_info_msg.publish(motion_run_info_msg);		
     }else if(ret == 0){
 		msg_serial_force.serial_force_state = SENSER_OK;
+		motion_run_info_msg.state = "force sensor ok";
+		pub_motion_run_info_msg.publish(motion_run_info_msg);	
     }
 
 	while(1){
@@ -154,25 +163,29 @@ void serial_read_loop(void)
         for(i=0;i<5;i++){
             ret = get_force(FrocePort,&force_temp[i]);
             if(ret == -1){
-				//错误信息收集
+				motion_run_info_msg.error_log++;
+				pub_motion_run_info_msg.publish(motion_run_info_msg);
                 i--;
             }
         }
         force_t = bubble_sort_and_average(force_temp,5);
 		
-		if(force_t > 129){
-			force_t = (uint32_t)((0.1107*force_t-14.24)*9.8*10);
-		}else{
-			force_t = 0;
-		}
+		// if(force_t > 129){
+			// force_t = (uint32_t)((0.1107*force_t-14.24)*9.8*10);
+		// }else{
+			// force_t = 0;
+		// }
         
         if(force_t > PROTECTION_FORCE_VALUE){
 			msg_serial_force.serial_force_state = SENSER_OUT_RANGE;
+			motion_run_info_msg.state = "force sensor out of range";
+			motion_run_info_msg.error_log++;
+			pub_motion_run_info_msg.publish(motion_run_info_msg);				
         }
         
 		msg_serial_force.force = force_t;
 		pub_msg_force.publish(msg_serial_force);
-		ROS_INFO("pub force data");
+		ROS_INFO("pub force data: %d",force_t);
 	}
 }
 
@@ -183,6 +196,7 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh;
 	
 	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",1,true);
+	pub_motion_run_info_msg = nh.advertise<motion_control::motion_run_info_msg>("force_run_info_msg",1,true);
 	
 	boost::thread serial_read(&serial_read_loop);
 	

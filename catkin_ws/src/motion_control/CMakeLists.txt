@@ -61,6 +61,7 @@ add_message_files(
   sensor_position_msg.msg
   msg_gait.msg
   motion_module_defualt_para.msg
+  motion_run_info_msg.msg
   # Message2.msg
 )
 

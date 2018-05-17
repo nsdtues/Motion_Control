@@ -2,8 +2,8 @@
   <node pkg="motion_control" type="serial_force" name="serial_force" />
   <node pkg="motion_control" type="serial_motor" name="serial_motor" output="screen" />
   <node pkg="motion_control" type="system_pot" name="system_pot" />
+  <node pkg="motion_control" type="test_node_gait" name="test_node_gait" />
   <node pkg="motion_control" type="system_node" name="system_node" />
   <node pkg="motion_control" type="test_node_system" name="test_node_system" />
-  <node pkg="motion_control" type="test_node_gait" name="test_node_gait" />
-  <node pkg="motion_control" type="test.py" name="get_para_defualt" />
+  <node pkg="motion_control" type="test.py" name="get_para_defualt" />  
 </launch>

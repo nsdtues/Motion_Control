@@ -1,0 +1,2 @@
+string state
+uint32 error_log

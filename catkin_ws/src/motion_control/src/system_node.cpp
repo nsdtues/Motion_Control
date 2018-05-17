@@ -25,7 +25,6 @@ motion_control::msg_motion_evt msg_motion_evt;
 motion_control::msg_motion_cmd msg_motion_cmd;
 
 std::string motion_state;
-uint32_t motor_check_results;
 
 void msg_motion_para_callback(const motion_control::motion_module_defualt_para& para_input)
 {
@@ -53,7 +52,7 @@ void sys_cmd_msg_to_motor_callback(const motion_control::sys_cmd_msg_to_motor& c
 
 void msg_motion_evt_callback(const motion_control::msg_motion_evt& evt_input)
 {
-	motor_check_results = evt_input.check_results;		
+	msg_motion_evt.check_results = evt_input.check_results;		
 	pub_semaphore.post();
 }
 
@@ -74,12 +73,13 @@ void motion_cmd_pub_loop(void)
 
 	pub_msg_motion_cmd.publish(msg_motion_cmd);
 	
-	sub_semaphore.wait();
+	pub_semaphore.wait();
 	
     sleep(2);
 
     if(msg_motion_evt.check_results == module_check_success){
         msg_motion_cmd.state = CTL_CMDMOTIONSTART;
+		pub_msg_motion_cmd.publish(msg_motion_cmd);
         node_motor_msg_to_sys.evt = "initialsuccess";
     }else{
         node_motor_msg_to_sys.evt = "initialerror";
