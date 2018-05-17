@@ -1,0 +1,6 @@
+string force_state
+uint32 force_error_log
+string motor_state
+uint32 motor_error_log
+string pot_state
+uint32 pot_error_log

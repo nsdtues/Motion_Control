@@ -5,14 +5,14 @@
 #include "boost/thread.hpp"
 #include <ros/ros.h>
 #include "motion_control/msg_serial_force.h"
-#include "motion_control/motion_run_info_msg.h"
+#include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
 
-int FrocePort;
+int FrocePort = -1;
 ros::Publisher pub_msg_force;
-ros::Publisher pub_motion_run_info_msg;
+ros::Publisher pub_sensor_run_info_msg;
 
-motion_control::motion_run_info_msg motion_run_info_msg;
+motion_control::sensor_run_info_msg sensor_run_info_msg;
 
 //获取力传感器数据，一帧的格式为 帧头：0x53 数据：0x** 0x** 校验：两个数据的与 帧尾：0x59
 int get_force(int port,uint32_t *msg)
@@ -57,8 +57,8 @@ int get_force(int port,uint32_t *msg)
                     state = 0;
                     readcnt = 0;
 					
-					motion_run_info_msg.error_log++;				//校验错误，收集错误信息
-					pub_motion_run_info_msg.publish(motion_run_info_msg);
+					sensor_run_info_msg.error_log++;				//校验错误，收集错误信息
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
 					
                     break;
                 }
@@ -77,8 +77,8 @@ int get_force(int port,uint32_t *msg)
                 state = 0;
                 readcnt= 0;
 
-				motion_run_info_msg.error_log++;				//校验错误，收集错误信息
-				pub_motion_run_info_msg.publish(motion_run_info_msg);
+				sensor_run_info_msg.error_log++;				//校验错误，收集错误信息
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
 
                 break;
             }
@@ -133,28 +133,27 @@ void serial_read_loop(void)
 	int i;
 	uint32_t force_t;
 		
-    FrocePort = tty_init(FORCE_PORT_NUM);
-	
+    // FrocePort = tty_init(FORCE_PORT_NUM);
     if(FrocePort<0){
 		msg_serial_force.serial_force_state = SENSER_NO_PORT;
-		motion_run_info_msg.state = "can not open /dev/ttyUSBforce";
-        motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);		
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBforce";
+        sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }	
 	
-	driver_init(FrocePort,FORCE_PORT_NUM);
+	// driver_init(FrocePort,FORCE_PORT_NUM);
 	// ROS_INFO("open serial force ok");
 	
     int ret = get_force(FrocePort,&force_temp[0]);
     if(ret == -1){
 		msg_serial_force.serial_force_state = SENSER_NO_DATA;
-		motion_run_info_msg.state = "force sensor no data";
-		motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);		
+		sensor_run_info_msg.state = "force sensor no data";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }else if(ret == 0){
 		msg_serial_force.serial_force_state = SENSER_OK;
-		motion_run_info_msg.state = "force sensor ok";
-		pub_motion_run_info_msg.publish(motion_run_info_msg);	
+		sensor_run_info_msg.state = "force sensor ok";
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);	
     }
 
 	while(1){
@@ -163,8 +162,8 @@ void serial_read_loop(void)
         for(i=0;i<5;i++){
             ret = get_force(FrocePort,&force_temp[i]);
             if(ret == -1){
-				motion_run_info_msg.error_log++;
-				pub_motion_run_info_msg.publish(motion_run_info_msg);
+				sensor_run_info_msg.error_log++;
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                 i--;
             }
         }
@@ -178,9 +177,9 @@ void serial_read_loop(void)
         
         if(force_t > PROTECTION_FORCE_VALUE){
 			msg_serial_force.serial_force_state = SENSER_OUT_RANGE;
-			motion_run_info_msg.state = "force sensor out of range";
-			motion_run_info_msg.error_log++;
-			pub_motion_run_info_msg.publish(motion_run_info_msg);				
+			sensor_run_info_msg.state = "force sensor out of range";
+			sensor_run_info_msg.error_log++;
+			pub_sensor_run_info_msg.publish(sensor_run_info_msg);				
         }
         
 		msg_serial_force.force = force_t;
@@ -196,7 +195,7 @@ int main(int argc, char **argv)
 	ros::NodeHandle nh;
 	
 	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",1,true);
-	pub_motion_run_info_msg = nh.advertise<motion_control::motion_run_info_msg>("force_run_info_msg",1,true);
+	pub_sensor_run_info_msg = nh.advertise<motion_control::sensor_run_info_msg>("force_run_info_msg",1,true);
 	
 	boost::thread serial_read(&serial_read_loop);
 	

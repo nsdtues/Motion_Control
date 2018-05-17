@@ -61,7 +61,8 @@ add_message_files(
   sensor_position_msg.msg
   msg_gait.msg
   motion_module_defualt_para.msg
-  motion_run_info_msg.msg
+  sensor_run_info_msg.msg
+  motion_module_run_info_msg.msg
   # Message2.msg
 )
 
@@ -181,6 +182,10 @@ target_link_libraries(test_node_system  ${catkin_LIBRARIES} )
 add_executable(test_node_gait src/test_node_gait.cpp)
 add_dependencies(test_node_gait ${catkin_EXPORTED_TARGETS})
 target_link_libraries(test_node_gait  ${catkin_LIBRARIES} )
+
+add_executable(motion_module_run_info_node src/motion_module_run_info_node.cpp)
+add_dependencies(motion_module_run_info_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(motion_module_run_info_node  ${catkin_LIBRARIES} )
 #############
 ## Install ##
 #############

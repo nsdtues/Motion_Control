@@ -8,18 +8,18 @@
 #include <ros/ros.h>
 #include "motion_control/msg_serial_pot.h"
 #include "motion_control/sensor_position_msg.h"
-#include "motion_control/motion_run_info_msg.h"
+#include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
 
 ros::Publisher pub_msg_pot;
-ros::Publisher pub_motion_run_info_msg;
+ros::Publisher pub_sensor_run_info_msg;
 
 boost::interprocess::interprocess_semaphore sub_semaphore(0);
 
-motion_control::motion_run_info_msg motion_run_info_msg;
+motion_control::sensor_run_info_msg sensor_run_info_msg;
 
 #if(WHERE_MOTION == DESKTOP_VERSION)
-int AdcPort;			//电位计的端口号	
+int AdcPort = 0;			//电位计的端口号	
 
 int get_pot(int port,float *msg)
 {
@@ -62,8 +62,8 @@ int get_pot(int port,float *msg)
                 }else{
                     state = 0;
                     readcnt = 0;
-                    motion_run_info_msg.error_log++;
-					pub_motion_run_info_msg.publish(motion_run_info_msg);
+                    sensor_run_info_msg.error_log++;
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
 
                     break;
                 }
@@ -81,8 +81,8 @@ int get_pot(int port,float *msg)
             else{
                 state = 0;
                 readcnt= 0;
-                motion_run_info_msg.error_log++;
-				pub_motion_run_info_msg.publish(motion_run_info_msg);
+                sensor_run_info_msg.error_log++;
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                 break;
             }
         default:
@@ -99,28 +99,28 @@ void pot_pub_loop(void){
     int i,ret;
     float pot_t,pot_temp[12];
 
-    AdcPort = tty_init(ADC_PORT_NUM);
+    // AdcPort = tty_init(ADC_PORT_NUM);
 
     if(AdcPort<0){
 		msg_serial_pot.serial_pot_state = SENSER_NO_PORT;
-		motion_run_info_msg.state = "can not open /dev/ttyUSBpot";
-        motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);		
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBpot";
+        sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }
 
-    driver_init(AdcPort,ADC_PORT_NUM);
+    // driver_init(AdcPort,ADC_PORT_NUM);
 
     ret = get_pot(AdcPort,&pot_temp[0]);
 
     if(ret == -1){
 		msg_serial_pot.serial_pot_state = SENSER_NO_DATA;
-		motion_run_info_msg.state = "pot sensor no data";
-		motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);		
+		sensor_run_info_msg.state = "pot sensor no data";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }else if(ret == 0){
 		msg_serial_pot.serial_pot_state = SENSER_OK;
-		motion_run_info_msg.state = "pot sensor ok";
-		pub_motion_run_info_msg.publish(motion_run_info_msg);
+		sensor_run_info_msg.state = "pot sensor ok";
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
     }
 
     while(1){
@@ -133,8 +133,8 @@ void pot_pub_loop(void){
             if((i>0)&(i<9)){
                 pot_t = pot_temp[i]+pot_t ;
                 if(ret == -1){
-					motion_run_info_msg.error_log++;
-					pub_motion_run_info_msg.publish(motion_run_info_msg);
+					sensor_run_info_msg.error_log++;
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                     i--;
                 }
             }
@@ -143,9 +143,9 @@ void pot_pub_loop(void){
 
         if((pot_t < PROTECTION_POT_VALUE_L)||(pot_t > PROTECTION_POT_VALUE_H)){
 			msg_serial_pot.serial_pot_state = SENSER_OUT_RANGE;
-			motion_run_info_msg.state = "pot sensor out of range";
-			motion_run_info_msg.error_log++;
-			pub_motion_run_info_msg.publish(motion_run_info_msg);
+			sensor_run_info_msg.state = "pot sensor out of range";
+			sensor_run_info_msg.error_log++;
+			pub_sensor_run_info_msg.publish(sensor_run_info_msg);
         }
 
 		msg_serial_pot.pot = pot_t;
@@ -186,8 +186,8 @@ void pot_pub_loop(void){
 	sub_semaphore.wait();
 	
 	msg_serial_pot.serial_pot_state = SENSER_OK;
-	motion_run_info_msg.state = "pot sensor ok";
-	pub_motion_run_info_msg.publish(motion_run_info_msg);
+	sensor_run_info_msg.state = "pot sensor ok";
+	pub_sensor_run_info_msg.publish(sensor_run_info_msg);
 	
 	pot_t = (float)pot/1000;
 	
@@ -211,9 +211,9 @@ void pot_pub_loop(void){
 		
         if((pot_t < PROTECTION_POT_VALUE_L)||(pot_t > PROTECTION_POT_VALUE_H)){
 			msg_serial_pot.serial_pot_state = SENSER_OUT_RANGE;
-			motion_run_info_msg.state = "pot sensor out of range";
-			motion_run_info_msg.error_log++;
-			pub_motion_run_info_msg.publish(motion_run_info_msg);			
+			sensor_run_info_msg.state = "pot sensor out of range";
+			sensor_run_info_msg.error_log++;
+			pub_sensor_run_info_msg.publish(sensor_run_info_msg);			
         }		
 		msg_serial_pot.pot = pot_t;
 		pub_msg_pot.publish(msg_serial_pot);
@@ -227,7 +227,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 	
 	pub_msg_pot = nh.advertise<motion_control::msg_serial_pot>("msg_serial_pot",1,true);
-	pub_motion_run_info_msg = nh.advertise<motion_control::motion_run_info_msg>("pot_run_info_msg",1,true);
+	pub_sensor_run_info_msg = nh.advertise<motion_control::sensor_run_info_msg>("pot_run_info_msg",1,true);
 #if(WHERE_MOTION == EXOSUIT_VERSION)	
 	ros::Subscriber sub_position = nh.subscribe("sensor_position_msg", 1, position_callback);
 #endif

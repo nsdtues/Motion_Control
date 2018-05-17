@@ -1,6 +1,4 @@
 //serial_motor.cpp  
-//创建于 2018年5月3日
-//更新于 2018年5月3日
 //source ~/Motion_Control/catkin_ws/devel/setup.bash
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
@@ -11,7 +9,7 @@
 #include "motion_control/msg_motion_cmd.h"
 #include "motion_control/msg_motion_evt.h"
 #include "motion_control/msg_gait.h"
-#include "motion_control/motion_run_info_msg.h"
+#include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
 
 boost::interprocess::interprocess_semaphore sys_cmd_semaphore(0);
@@ -19,10 +17,11 @@ boost::interprocess::interprocess_semaphore pot_semaphore(0);
 boost::interprocess::interprocess_semaphore force_semaphore(0);
 
 ros::Publisher pub_msg_motion_evt;
+ros::Publisher pub_sensor_run_info_msg;
 
-motion_control::motion_run_info_msg motion_run_info_msg;
+motion_control::sensor_run_info_msg sensor_run_info_msg;
 
-int MotorPort;
+int MotorPort = 0;
 uint32_t force_now;
 float pot_now;
 int32_t EnableFlag = MOTOR_EN_TRUE;
@@ -78,16 +77,16 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
             }
             if(nread == 0){
                 ROS_INFO("Communication fail\n");
-				motion_run_info_msg.state = "can not communication with driver";
-				motion_run_info_msg.error_log++;
-				pub_motion_run_info_msg.publish(motion_run_info_msg);
+				sensor_run_info_msg.state = "can not communication with driver";
+				sensor_run_info_msg.error_log++;
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                 return -1;
             }
             data[readcnt] = datagram[0];
             readcnt++;
             if(datagram[0]==0x0D){	//最后一位为“\n”判断接收到最后一位后再处理数据
                 memcpy(temp.com,data,sizeof(data));
-                // printf("rev = %s\n",temp.com);
+                // ROS_INFO("rev = %s\n",temp.com);
                 if(strstr(temp.com,"v")!=0){
 
                     sscanf(temp.com,"%*s%d",&temp.temp);
@@ -98,9 +97,9 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 
                 }else if(strstr(temp.com,"e")!=0){
                     sscanf(temp.com,"%*s%d",&temp.state);
-                    printf("motor error = %d\n",temp.state);
-					motion_run_info_msg.error_log++;
-					pub_motion_run_info_msg.publish(motion_run_info_msg);
+                    ROS_INFO("motor error = %d\n",temp.state);
+					sensor_run_info_msg.error_log++;
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                     break;
                 }else if(strstr(temp.com,"ok")!=0){
                     return 0;
@@ -179,32 +178,58 @@ void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 	}
 }
 
+uint32_t state_check(const uint32_t cmd, const uint32_t old)
+{
+	if((cmd == 1)&&(old == 2)){
+		return old;
+	}else if((cmd == 2)&&(old == 3)){
+		return old;
+	}else if((cmd == 3)&&(old == 1)){
+		return old;
+	}else{
+		return cmd;	
+	}
+}
+
 void gait_callback(const motion_control::msg_gait& gait_input)
 {
+	uint32_t state_cmd;
+	static uint32_t gait_2_cnt = 0;
 	if(gait_input.gait.find("Gait:GaitStopping") != std::string::npos){
 		gait_state = 3;
 	}else{
 		if(motion_cmd_para.foot == 0){
 			if(gait_input.gait.find("GaitL:A") != std::string::npos){
-				gait_state = 1;
+				state_cmd = 1;
 			}else if(gait_input.gait.find("GaitL:B") != std::string::npos){
-				gait_state = 2;
+				state_cmd = 2;
 			}else if(gait_input.gait.find("GaitL:C") != std::string::npos){
-				gait_state = 3;
+				state_cmd = 3;
 			}
 		}else if(motion_cmd_para.foot == 1){
 			if(gait_input.gait.find("GaitR:A") != std::string::npos){
-				gait_state = 1;
+				state_cmd = 1;
 			}else if(gait_input.gait.find("GaitR:B") != std::string::npos){
-				gait_state = 2;
+				state_cmd = 2;
 			}else if(gait_input.gait.find("GaitR:B") != std::string::npos){
-				gait_state = 3;
+				state_cmd = 3;
 			}			
 		}else{
-			gait_state = 3;
+			state_cmd = 3;
 		}
 	}
-	// ROS_INFO("gait_state: [%u]\n", gait_state);  
+	
+	if(gait_state == 2){
+		gait_2_cnt++;
+	}else{
+		gait_2_cnt = 0;
+	}
+	if(gait_2_cnt == 250){
+		state_cmd = 3;
+	}
+		
+	gait_state = state_check(state_cmd, gait_state);		
+	// ROS_INFO("gait_state: [%u]\n", gait_state);  	
 }
 
 
@@ -225,18 +250,18 @@ void motor_ctrl_loop(void)
 	
 	motion_control::msg_motion_evt msg_motion_evt;
 	
-    MotorPort = tty_init(MOTOR_PORT_NUM);
+    // MotorPort = tty_init(MOTOR_PORT_NUM);
     if(MotorPort<0){
-		motion_run_info_msg.state = "can not open /dev/ttyUSBmotor";
-		motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
     }
-
-    int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
+	int driver_init_resualt = 0;
+    // int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
     if(driver_init_resualt == 0){
-		motion_run_info_msg.state = "can not open /dev/ttyUSBmotor";
-		motion_run_info_msg.error_log++;
-		pub_motion_run_info_msg.publish(motion_run_info_msg);
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
     }		
 	
 #if(RUN_MOTION == REAL)
@@ -275,16 +300,16 @@ void motor_ctrl_loop(void)
                             ROS_INFO("check reualt: %d %d\n",ret1,ret2);
 
                             if((ret1 == 1)&&(ret2 == 1)){
-                                motion_run_info_msg.state = "motion module is on checking";
-								pub_motion_run_info_msg.publish(motion_run_info_msg);
+                                sensor_run_info_msg.state = "motion module is on checking";
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                             }else{
                                 ROS_INFO("motor module self check abort:can not get senser data\n");
 								msg_motion_evt.check_results = no_sensor_data;
                                 pub_msg_motion_evt.publish(msg_motion_evt);
 								
-								motion_run_info_msg.state = "self check failed: no sensor data";
-								motion_run_info_msg.error_log++;
-								pub_motion_run_info_msg.publish(motion_run_info_msg);
+								sensor_run_info_msg.state = "self check failed: no sensor data";
+								sensor_run_info_msg.error_log++;
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                                 break;
                             }
                         }
@@ -347,9 +372,9 @@ void motor_ctrl_loop(void)
                             pub_msg_motion_evt.publish(msg_motion_evt);		
                             is_check = 1;
 							
-							motion_run_info_msg.state = "self check failed: can not reach zero position";
-							motion_run_info_msg.error_log++;
-							pub_motion_run_info_msg.publish(motion_run_info_msg);							
+							sensor_run_info_msg.state = "self check failed: can not reach zero position";
+							sensor_run_info_msg.error_log++;
+							pub_sensor_run_info_msg.publish(sensor_run_info_msg);							
                             break;
                         }
 #if((RUN_MOTION == REAL)||(GAIT_B_MODE == STUDY_WALKING_POSITON))
@@ -382,9 +407,9 @@ void motor_ctrl_loop(void)
 								pub_msg_motion_evt.publish(msg_motion_evt);	
                                 is_check = 1;
 								
-								motion_run_info_msg.state = "self check failed: can not reach preload position";
-								motion_run_info_msg.error_log++;
-								pub_motion_run_info_msg.publish(motion_run_info_msg);										
+								sensor_run_info_msg.state = "self check failed: can not reach preload position";
+								sensor_run_info_msg.error_log++;
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);										
 								
                                 break;
                             }
@@ -474,8 +499,8 @@ void motor_ctrl_loop(void)
                         pub_msg_motion_evt.publish(msg_motion_evt);	
                         is_check = 1;
 						
-						motion_run_info_msg.state = "self check sucsess";
-						pub_motion_run_info_msg.publish(motion_run_info_msg);	
+						sensor_run_info_msg.state = "self check sucsess";
+						pub_sensor_run_info_msg.publish(sensor_run_info_msg);	
 								
                         ROS_INFO("motion module selfcheck ok\n");
                     }else if((is_check == 1)&&(motor_state_old!=CTL_CMDINITIAL)){
@@ -853,7 +878,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 	
 	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",1,true);
-	pub_motion_run_info_msg = nh.advertise<motion_control::motion_run_info_msg>("motor_run_info_msg",1,true);
+	pub_sensor_run_info_msg = nh.advertise<motion_control::sensor_run_info_msg>("motor_run_info_msg",1,true);
 	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 1, force_callback);
 	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 1, pot_callback);
 	ros::Subscriber sub_motion_cmd = nh.subscribe("msg_motion_cmd", 1, motion_cmd_callback);
