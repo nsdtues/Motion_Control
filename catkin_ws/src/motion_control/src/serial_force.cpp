@@ -1,20 +1,20 @@
-//serial_force.cpp  
-//´´½¨ÓÚ 2018Äê5ÔÂ3ÈÕ
-//¸üĞÂÓÚ 2018Äê5ÔÂ4ÈÕ
+ï»¿//serial_force.cpp  
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
 #include <ros/ros.h>
 #include "motion_control/msg_serial_force.h"
+#include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
 
-int FrocePort;
+int FrocePort = -1;
 ros::Publisher pub_msg_force;
+ros::Publisher pub_sensor_run_info_msg;
 
+motion_control::sensor_run_info_msg sensor_run_info_msg;
 
-//»ñÈ¡Á¦´«¸ĞÆ÷Êı¾İ£¬Ò»Ö¡µÄ¸ñÊ½Îª Ö¡Í·£º0x53 Êı¾İ£º0x** 0x** Ğ£Ñé£ºÁ½¸öÊı¾İµÄÓë Ö¡Î²£º0x59
+//è·å–åŠ›ä¼ æ„Ÿå™¨æ•°æ®ï¼Œä¸€å¸§çš„æ ¼å¼ä¸º å¸§å¤´ï¼š0x53 æ•°æ®ï¼š0x** 0x** æ ¡éªŒï¼šä¸¤ä¸ªæ•°æ®çš„ä¸ å¸§å°¾ï¼š0x59
 int get_force(int port,uint32_t *msg)
 {
-
     int32_t 		readcnt = 0,nread,ncheck=0,state = 0;
     uint8_t			data[256],datagram[64];
     float	  		adc_temp;
@@ -54,11 +54,10 @@ int get_force(int port,uint32_t *msg)
 
                     state = 0;
                     readcnt = 0;
-
-                    // pthread_mutex_lock(&mutex_info);
-                    // motor_module_run_info.force_senser_error++;		//Ğ£Ñé´íÎó£¬ÊÕ¼¯´íÎóĞÅÏ¢
-                    // pthread_mutex_unlock(&mutex_info);
-
+					
+					sensor_run_info_msg.error_log++;				//æ ¡éªŒé”™è¯¯ï¼Œæ”¶é›†é”™è¯¯ä¿¡æ¯
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
+					
                     break;
                 }
             }
@@ -76,10 +75,9 @@ int get_force(int port,uint32_t *msg)
                 state = 0;
                 readcnt= 0;
 
-                // pthread_mutex_lock(&mutex_info);
-                // motor_module_run_info.force_senser_error++;		//Ğ£Ñé´íÎó£¬ÊÕ¼¯´íÎóĞÅÏ¢
-                // pthread_mutex_unlock(&mutex_info);
-
+				sensor_run_info_msg.error_log++;				//æ ¡éªŒé”™è¯¯ï¼Œæ”¶é›†é”™è¯¯ä¿¡æ¯
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
+                
                 break;
             }
         default:
@@ -90,8 +88,8 @@ int get_force(int port,uint32_t *msg)
 }
 
 
-//¶ÔÁ¦´«¸ĞÆ÷µÄÊı¾İ½øĞĞ´¦Àí
-//Ã°ÅİËã·¨+Æ½¾ù£¬³ıÈ¥ÁË×î´óºÍ×îĞ¡µÄÒ»¸öÊı
+//å¯¹åŠ›ä¼ æ„Ÿå™¨çš„æ•°æ®è¿›è¡Œå¤„ç†
+//å†’æ³¡ç®—æ³•+å¹³å‡ï¼Œé™¤å»äº†æœ€å¤§å’Œæœ€å°çš„ä¸€ä¸ªæ•°
 uint32_t bubble_sort_and_average(uint32_t *msg, uint8_t len)
 {
     uint32_t temp;
@@ -134,39 +132,57 @@ void serial_read_loop(void)
 	uint32_t force_t;
 		
     FrocePort = tty_init(FORCE_PORT_NUM);
+    if(FrocePort<0){
+		msg_serial_force.serial_force_state = SENSER_NO_PORT;
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBforce";
+        sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
+    }	
+	
 	driver_init(FrocePort,FORCE_PORT_NUM);
+	// ROS_INFO("open serial force ok");
 	
     int ret = get_force(FrocePort,&force_temp[0]);
     if(ret == -1){
 		msg_serial_force.serial_force_state = SENSER_NO_DATA;
+		sensor_run_info_msg.state = "force sensor no data";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }else if(ret == 0){
 		msg_serial_force.serial_force_state = SENSER_OK;
+		sensor_run_info_msg.state = "force sensor ok";
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);	
     }
 
 	while(1){
-		tcflush(FrocePort,TCIFLUSH);					//Çå³ıµô´®¿Ú»º´æ£¬²»È»´®¿Ú»á»º´æ¹ı¶àÊı¾İ£¬µ¼ÖÂÊµÊ±ĞÔ½µµÍ
+		tcflush(FrocePort,TCIFLUSH);					//æ¸…é™¤æ‰ä¸²å£ç¼“å­˜ï¼Œä¸ç„¶ä¸²å£ä¼šç¼“å­˜è¿‡å¤šæ•°æ®ï¼Œå¯¼è‡´å®æ—¶æ€§é™ä½
 
         for(i=0;i<5;i++){
             ret = get_force(FrocePort,&force_temp[i]);
             if(ret == -1){
-				//´íÎóĞÅÏ¢ÊÕ¼¯
+				sensor_run_info_msg.error_log++;
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                 i--;
             }
         }
         force_t = bubble_sort_and_average(force_temp,5);
 		
-		if(force_t > 129){
-			force_t = (uint32_t)((0.1107*force_t-14.24)*9.8*10);
-		}else{
-			force_t = 0;
-		}
+		// if(force_t > 129){
+			// force_t = (uint32_t)((0.1107*force_t-14.24)*9.8*10);
+		// }else{
+			// force_t = 0;
+		// }
         
         if(force_t > PROTECTION_FORCE_VALUE){
 			msg_serial_force.serial_force_state = SENSER_OUT_RANGE;
+			sensor_run_info_msg.state = "force sensor out of range";
+			sensor_run_info_msg.error_log++;
+			pub_sensor_run_info_msg.publish(sensor_run_info_msg);				
         }
         
 		msg_serial_force.force = force_t;
 		pub_msg_force.publish(msg_serial_force);
+		ROS_INFO("pub force data: %d",force_t);
 	}
 }
 
@@ -176,7 +192,8 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "serial_force");
 	ros::NodeHandle nh;
 	
-	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",50,true);
+	pub_msg_force = nh.advertise<motion_control::msg_serial_force>("msg_serial_force",1,true);
+	pub_sensor_run_info_msg = nh.advertise<motion_control::sensor_run_info_msg>("force_run_info_msg",1,true);
 	
 	boost::thread serial_read(&serial_read_loop);
 	

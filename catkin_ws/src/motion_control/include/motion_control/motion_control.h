@@ -1,4 +1,4 @@
-#ifndef _MOTION_CONTROL_HEADER
+ï»¿#ifndef _MOTION_CONTROL_HEADER
 #define _MOTION_CONTROL_HEADER
 
 
@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-//¿ØÖÆÏûÏ¢ÀàĞÍ
+//æ§åˆ¶æ¶ˆæ¯ç±»å‹
 typedef enum 
 {
     CTL_CMDINITIAL = 55,

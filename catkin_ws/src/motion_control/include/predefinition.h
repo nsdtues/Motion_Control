@@ -1,45 +1,45 @@
-#ifndef _PREDEFINITION_HEADER
+ï»¿#ifndef _PREDEFINITION_HEADER
 #define _PREDEFINITION_HEADER
 
-#define DESKTOP_VERSION 0                           //×ÀÃæ°æ
-#define EXOSUIT_VERSION 1                           //´©´÷°æ
+#define DESKTOP_VERSION 0                           //ç©¿æˆ´ç‰ˆ
+#define EXOSUIT_VERSION 1                           //æ¡Œé¢ç‰ˆ
 
-#define ENCODE_1MM 325								//1mm¶ÔÓ¦µÄµçÎ»¼Æ¼ÆÊý  325
-#define SELF_CHECK_ADJUST_MM 30							//×Ô¼ì¶ÔÓ¦µÄ×î´óµ÷ÕûÎ»ÖÃ mm
-#define MOTION_ADJUST_MM 10									//×ÔÊÊÓ¦¶ÔÓ¦µÄ×î´óµ÷ÖÆÎ»ÖÃ mm
+#define ENCODE_1MM 325								//1mmå¯¹åº”çš„ç”µä½è®¡è®¡æ•°  325
+#define SELF_CHECK_ADJUST_MM 30							//è‡ªæ£€å¯¹åº”çš„æœ€å¤§è°ƒæ•´ä½ç½® mm
+#define MOTION_ADJUST_MM 10									//è‡ªé€‚åº”å¯¹åº”çš„æœ€å¤§è°ƒæ•´ä½ç½® mm
 
 
-#define WHERE_MOTION EXOSUIT_VERSION
+#define WHERE_MOTION DESKTOP_VERSION
 
 #if(WHERE_MOTION == EXOSUIT_VERSION)
 #define SELF_CHECK_POT_VALUE 2.5
 #define ENCODER_DEFUALT_POSITON 30000
 #define MOTOR_ENCODER_DIRECTION 1
-#define POT_VALUE_LONG 	1.55						//²¨µÇÏßÀ­µ½×î³¤Ê±µçÎ»¼ÆµÄÊý¾Ý
-#define POT_VALUE_SHORT 3.05						//²¨µÇÏßÀ­µ½×î¶ÌÊ±µçÎ»¼ÆµÄÊý¾Ý
+#define POT_VALUE_LONG 	1.55						//æ³¢ç™»çº¿æ‹‰åˆ°æœ€é•¿æ—¶ç”µä½è®¡çš„æ•°æ®
+#define POT_VALUE_SHORT 3.05						//æ³¢ç™»çº¿æ‹‰åˆ°æœ€çŸ­æ—¶ç”µä½è®¡çš„æ•°æ®
 #endif
 
 #if(WHERE_MOTION == DESKTOP_VERSION)
-#define SELF_CHECK_POT_VALUE 0.3					//×Ô¼ìµ½´ïµÄÎ»ÖÃ
-#define ENCODER_DEFUALT_POSITON 35000				//×Ô¼ìÉèÖÃµÄ±àÂëÆ÷È¡Öµ
+#define SELF_CHECK_POT_VALUE 0.45					//è‡ªæ£€ä½ç½®
+#define ENCODER_DEFUALT_POSITON 30000				//è‡ªæ£€ç¼–ç å™¨å–å€¼
 #endif
 
 #define VELOCITY_MODE_MAX_SPEED 1500000			
 #define VELOCITY_MODE_MAX_ACC 2000000
-#define SELF_CHECK_FORCE_VALUE 200					//×Ô¼ì¶ÔÓ¦µÄÔ¤½ôÁ¦Öµ
+#define SELF_CHECK_FORCE_VALUE 200					//è‡ªæ£€å¯¹åº”çš„é¢„ç´§åŠ›å€¼
 
-#define PROTECTION_FORCE_VALUE 2000                 //³¬¹ý200N×Ô¶¯±£»¤
-#define PROTECTION_POT_VALUE_H 3.15                  //µçÎ»¼Æ±£»¤×î´ó3.2
-#define PROTECTION_POT_VALUE_L 0.3                  //µçÎ»¼Æ±£»¤×îÐ¡0.01
+#define PROTECTION_FORCE_VALUE 2000                 //è¶…è¿‡200Nè‡ªåŠ¨ä¿æŠ¤
+#define PROTECTION_POT_VALUE_H 3.15                 //ç”µä½è®¡ä¿æŠ¤æœ€å¤§ 3.15
+#define PROTECTION_POT_VALUE_L 0.3                  //ç”µä½è®¡ä¿æŠ¤æœ€å° 0.3
 
-#define PULL_FIX_POSITION 0                         //¹Ì¶¨Î»ÖÃÄ£Ê½
-#define PULL_FORCE_TORQUE 1                         //Á¦¾Ø»¹Ä£Ê½
-#define PULL_FORCE_TORQUE_TEST 2                    //Á¦¾Ø»·£¬²âÊÔÓÃ
-#define STUDY_WALKING_POSITON 3						//²âÊÔÈËÐÐ×ßÎ»ÖÃ±ä»¯
+#define PULL_FIX_POSITION 0                         //å›ºå®šä½ç½®æ¨¡å¼
+#define PULL_FORCE_TORQUE 1                         //åŠ›çŸ©çŽ¯æ¨¡å¼
+#define PULL_FORCE_TORQUE_TEST 2                    //åŠ›çŸ©çŽ¯æµ‹è¯•ç”¨
+#define STUDY_WALKING_POSITON 3						//è·Ÿéšè¡Œèµ°
 
 #define GAIT_B_MODE PULL_FORCE_TORQUE
 
-#define DEBUG 0                                     //²âÊÔÓÃ
+#define DEBUG 0                                     //æµ‹è¯•ç”¨
 #define REAL 1
 
 #define RUN_MOTION DEBUG
@@ -53,15 +53,15 @@
 
 #define SYSTEM_OFF 0
 #define SYSTEM_ON 1
-#define SYSTEM_CLIENT_TEST SYSTEM_OFF				//ÊÇ·ñ½ÓÊÕÏµÍ³Ä£¿éµÄÍ¨Ñ¶
+#define SYSTEM_CLIENT_TEST SYSTEM_OFF				//æ˜¯å¦æŽ¥æ”¶ç³»ç»Ÿæ¨¡å—é€šè®¯
 
-#define CHANGE_PRELOAD_POSITION 1   				//0 ²»ÆôÓÃ  1 ÆôÓÃ    ×ÔÊÊÓ¦µ÷ÕûÔ¤½ôÁ¦Î»ÖÃ
+#define CHANGE_PRELOAD_POSITION 1   				
 
 #define MOTION_MODE_GAIT 1
 #define MOTION_MODE_FIXED 2
 #define MOTION_MODE_RELAX 3
 
-#define MAX_POSITION_ADJUST 1000					//×î´óÎ»ÖÃµ÷ÕûÇø¼ä
+#define MAX_POSITION_ADJUST 1000					
 
 #define CONFIGURATION_ONE 1
 #define SYSTEM_TEST_CONFIGURATION CONFIGURATION_ONE

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(motion_control)
+project(ros_server)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -8,11 +8,10 @@ project(motion_control)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  message_filters
-  message_generation
   roscpp
   rospy
   std_msgs
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -49,29 +48,18 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  msg_serial_force.msg
-  msg_serial_pot.msg
-  msg_motion_cmd.msg
-  msg_motion_evt.msg
-  node_motor_msg_to_sys.msg
-  sys_cmd_msg_to_motor.msg
-  sensor_foot_pressure_msg.msg
-  sensor_position_msg.msg
-  msg_gait.msg
-  motion_module_defualt_para.msg
-  sensor_run_info_msg.msg
-  motion_module_run_info_msg.msg
-  # Message2.msg
-)
+# add_message_files(
+#   FILES
+#   Message1.msg
+#   Message2.msg
+# )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+ add_service_files(
+    FILES
+    AddTwoInts.srv
+	#   Service2.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -81,10 +69,10 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-)
+ generate_messages(
+   DEPENDENCIES
+   std_msgs
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -117,8 +105,8 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES motion_control
-#  CATKIN_DEPENDS message_filters message_generation roscpp rospy std_msgs
+#  LIBRARIES ros_server
+#  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
 
@@ -129,13 +117,13 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-include
+# include
   ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/motion_control.cpp
+#   src/${PROJECT_NAME}/ros_server.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -146,7 +134,7 @@ include
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/motion_control_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/ros_server_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,42 +147,17 @@ include
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-add_executable(serial_force src/serial_force.cpp src/port.c src/user_time.c)
-add_dependencies(serial_force ${catkin_EXPORTED_TARGETS})
-target_link_libraries(serial_force  ${catkin_LIBRARIES} )
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
 
-add_executable(serial_motor src/serial_motor.cpp src/port.c src/user_time.c)
-add_dependencies(serial_motor ${catkin_EXPORTED_TARGETS})
-target_link_libraries(serial_motor  ${catkin_LIBRARIES} )
+add_executable(add_two_ints_server src/add_two_ints_server.cpp)
+add_dependencies(add_two_ints_server ${catkin_EXPORTED_TARGETS})
+target_link_libraries(add_two_ints_server ${catkin_LIBRARIES})
 
-add_executable(system_pot src/system_pot.cpp src/port.c src/user_time.c)
-add_dependencies(system_pot ${catkin_EXPORTED_TARGETS})
-target_link_libraries(system_pot  ${catkin_LIBRARIES} )
-
-add_executable(system_node src/system_node.cpp src/port.c src/user_time.c)
-add_dependencies(system_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(system_node  ${catkin_LIBRARIES} )
-
-
-#add_executable(motor_control_node src/motor_control_node.cpp src/motor_control.cpp)
-#add_dependencies(motor_control_node ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(motor_control_node  ${catkin_LIBRARIES} )
-
-add_executable(thread_test_node src/thread_test.cpp)
-add_dependencies(thread_test_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(thread_test_node  ${catkin_LIBRARIES} )
-
-add_executable(test_node_system src/test_node_system.cpp)
-add_dependencies(test_node_system ${catkin_EXPORTED_TARGETS})
-target_link_libraries(test_node_system  ${catkin_LIBRARIES} )
-
-add_executable(test_node_gait src/test_node_gait.cpp)
-add_dependencies(test_node_gait ${catkin_EXPORTED_TARGETS})
-target_link_libraries(test_node_gait  ${catkin_LIBRARIES} )
-
-add_executable(motion_module_run_info_node src/motion_module_run_info_node.cpp)
-add_dependencies(motion_module_run_info_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(motion_module_run_info_node  ${catkin_LIBRARIES} )
+add_executable(add_two_ints_client src/add_two_ints_client.cpp)
+add_dependencies(add_two_ints_client ${catkin_EXPORTED_TARGETS})
+target_link_libraries(add_two_ints_client ${catkin_LIBRARIES})
 
 #############
 ## Install ##
@@ -236,7 +199,7 @@ target_link_libraries(motion_module_run_info_node  ${catkin_LIBRARIES} )
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_motion_control.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_ros_server.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

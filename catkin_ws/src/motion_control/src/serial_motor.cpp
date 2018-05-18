@@ -1,6 +1,5 @@
-//serial_motor.cpp  
-//´´½¨ÓÚ 2018Äê5ÔÂ3ÈÕ
-//¸üĞÂÓÚ 2018Äê5ÔÂ3ÈÕ
+ï»¿//serial_motor.cpp  
+//source ~/Motion_Control/catkin_ws/devel/setup.bash
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
 #include "boost/interprocess/sync/interprocess_semaphore.hpp"
@@ -10,15 +9,20 @@
 #include "motion_control/msg_motion_cmd.h"
 #include "motion_control/msg_motion_evt.h"
 #include "motion_control/msg_gait.h"
+#include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
+#include <csignal>
 
 boost::interprocess::interprocess_semaphore sys_cmd_semaphore(0);
 boost::interprocess::interprocess_semaphore pot_semaphore(0);
 boost::interprocess::interprocess_semaphore force_semaphore(0);
 
 ros::Publisher pub_msg_motion_evt;
+ros::Publisher pub_sensor_run_info_msg;
 
-int MotorPort;
+motion_control::sensor_run_info_msg sensor_run_info_msg;
+
+int MotorPort = 0;
 uint32_t force_now;
 float pot_now;
 int32_t EnableFlag = MOTOR_EN_TRUE;
@@ -43,11 +47,11 @@ struct motion_cmd_t{
 	int32_t pid_umin;
 }motion_cmd_para;
 
-//Çı¶¯µç»úµÄ½Ó¿Ú£¬Í¨¹ı´®¿ÚASCIIÂëµÄ¸ñÊ½ÓëÇı¶¯Æ÷Í¨Ñ¶£¬Í¨Ñ¶·ÖÁ½ÖÖ
-//Ò»ÖÖÊÇ´øÓĞ²ÎÊıµÄ£¬ĞèÒª½«²ÎÊı´«Èëµ½para
-//²»´ø²ÎÊıµÄpara´«ÈëNULL¼´¿É
-//shiki.hÎÄ¼şÀïÓĞËùĞèÒªµÄÍ¨Ñ¶¸ñÊ½µÄºê¶¨Òå
-//·µ»ØÎªÇı¶¯Æ÷µÄ·´À¡£¨v ***; ok; e **;£©
+//é©±åŠ¨ç”µæœºçš„æ¥å£ï¼Œé€šè¿‡ä¸²å£ASCIIç çš„æ ¼å¼ä¸é©±åŠ¨å™¨é€šè®¯ï¼Œé€šè®¯åˆ†ä¸¤ç§
+//ä¸€ç§æ˜¯å¸¦æœ‰å‚æ•°çš„ï¼Œéœ€è¦å°†å‚æ•°ä¼ å…¥åˆ°para
+//ä¸å¸¦å‚æ•°çš„paraä¼ å…¥NULLå³å¯
+//motion_control.hæ–‡ä»¶é‡Œæœ‰æ‰€éœ€è¦çš„é€šè®¯æ ¼å¼çš„å®å®šä¹‰
+//è¿”å›ä¸ºé©±åŠ¨å™¨çš„åé¦ˆï¼ˆv ***; ok; e **;ï¼‰
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 {
     int32_t readcnt = 0,nread,nwrite;
@@ -64,24 +68,26 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
         sprintf(com,msg,*p);
     }
     while(try_cmd--){
-        nwrite = write(port,com,strlen(com));		//·¢ËÍ´®¿ÚÃüÁî
+        nwrite = write(port,com,strlen(com));		//å‘é€ä¸²å£å‘½ä»¤
 
         memset(data,'\0',256);
         while(try_t--){
-            nread = read(port,datagram,1);	//»ñÈ¡´®¿ÚÃüÁî
+            nread = read(port,datagram,1);	//è·å–ä¸²å£å‘½ä»¤
             if(nread<0){
                 return -1;
             }
             if(nread == 0){
-                printf("Communication fail\n");
-				//run_info
+                ROS_INFO("Communication fail\n");
+				sensor_run_info_msg.state = "can not communication with driver";
+				sensor_run_info_msg.error_log++;
+				pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                 return -1;
             }
             data[readcnt] = datagram[0];
             readcnt++;
-            if(datagram[0]==0x0D){	//×îºóÒ»Î»Îª¡°\n¡±ÅĞ¶Ï½ÓÊÕµ½×îºóÒ»Î»ºóÔÙ´¦ÀíÊı¾İ
+            if(datagram[0]==0x0D){	//æœ€åä¸€ä½ä¸ºâ€œ\nâ€åˆ¤æ–­æ¥æ”¶åˆ°æœ€åä¸€ä½åå†å¤„ç†æ•°æ®
                 memcpy(temp.com,data,sizeof(data));
-                //			printf("rev = %s\n",temp.com);
+                // ROS_INFO("rev = %s\n",temp.com);
                 if(strstr(temp.com,"v")!=0){
 
                     sscanf(temp.com,"%*s%d",&temp.temp);
@@ -92,8 +98,9 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 
                 }else if(strstr(temp.com,"e")!=0){
                     sscanf(temp.com,"%*s%d",&temp.state);
-                    printf("motor error = %d\n",temp.state);
-					//run_info
+                    ROS_INFO("motor error = %d\n",temp.state);
+					sensor_run_info_msg.error_log++;
+					pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                     break;
                 }else if(strstr(temp.com,"ok")!=0){
                     return 0;
@@ -116,7 +123,7 @@ void force_callback(const motion_control::msg_serial_force& force_input)
 		force_semaphore.post();
 		force_data_flag = 1;
 	}	
-	ROS_INFO("force_now: [%d]\n", force_now);  
+	// ROS_INFO("force_now: [%d]\n", force_now);  
 }
 
 void pot_callback(const motion_control::msg_serial_pot& pot_input)
@@ -131,7 +138,7 @@ void pot_callback(const motion_control::msg_serial_pot& pot_input)
 		pot_semaphore.post();
 		pot_data_flag = 1;
 	}	
-	ROS_INFO("pot: [%f]\n", pot_now);  
+	// ROS_INFO("pot: [%f]\n", pot_now);  
 }
 
 void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
@@ -140,6 +147,7 @@ void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 	motion_cmd_para.mode = motion_cmd_input.mode;
 	motion_cmd_para.foot = motion_cmd_input.foot;
 	motion_cmd_para.forceaid = motion_cmd_input.forceaid;
+	motion_cmd_para.forceaid = 3;
 	if(sys_cmd_flag == 0){
 		motion_cmd_para.max_force = motion_cmd_input.max_force;
 		motion_cmd_para.max_position = motion_cmd_input.max_position;
@@ -152,41 +160,83 @@ void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 		motion_cmd_para.pid_ki = motion_cmd_input.pid_ki;
 		motion_cmd_para.pid_umax = motion_cmd_input.pid_umax;
 		motion_cmd_para.pid_umin = motion_cmd_input.pid_umin;
+				
+		motion_cmd_para.max_force = 900;
+		motion_cmd_para.max_position = 6500;
+		motion_cmd_para.zero_position = 28500;
+		motion_cmd_para.preload_position = 23500;
+		motion_cmd_para.max_velocity = 1400000;
+		motion_cmd_para.nset_acc = 400000;
+		motion_cmd_para.max_pot = 0;
+		motion_cmd_para.pid_kp = 3000.0;
+		motion_cmd_para.pid_ki = 200.0;
+		motion_cmd_para.pid_umax = 100000;
+		motion_cmd_para.pid_umin = 100000;
+		
 		sys_cmd_flag = 1;
 		sys_cmd_semaphore.post();
-	}	
+		ROS_INFO("sem post"); 		
+	}
+}
+
+uint32_t state_check(const uint32_t cmd, const uint32_t old)
+{
+	if((cmd == 1)&&(old == 2)){
+		return old;
+	}else if((cmd == 2)&&(old == 3)){
+		return old;
+	}else if((cmd == 3)&&(old == 1)){
+		return old;
+	}else{
+		return cmd;	
+	}
 }
 
 void gait_callback(const motion_control::msg_gait& gait_input)
 {
+	uint32_t state_cmd;
+	static uint32_t gait_2_cnt = 0;
 	if(gait_input.gait.find("Gait:GaitStopping") != std::string::npos){
 		gait_state = 3;
 	}else{
 		if(motion_cmd_para.foot == 0){
 			if(gait_input.gait.find("GaitL:A") != std::string::npos){
-				gait_state = 1;
+				state_cmd = 1;
 			}else if(gait_input.gait.find("GaitL:B") != std::string::npos){
-				gait_state = 2;
+				state_cmd = 2;
 			}else if(gait_input.gait.find("GaitL:C") != std::string::npos){
-				gait_state = 3;
+				state_cmd = 3;
 			}
 		}else if(motion_cmd_para.foot == 1){
 			if(gait_input.gait.find("GaitR:A") != std::string::npos){
-				gait_state = 1;
+				state_cmd = 1;
 			}else if(gait_input.gait.find("GaitR:B") != std::string::npos){
-				gait_state = 2;
+				state_cmd = 2;
 			}else if(gait_input.gait.find("GaitR:B") != std::string::npos){
-				gait_state = 3;
+				state_cmd = 3;
 			}			
 		}else{
-			gait_state = 3;
+			state_cmd = 3;
 		}
-	}		
+	}
+	
+	if(gait_state == 2){
+		gait_2_cnt++;
+	}else{
+		gait_2_cnt = 0;
+	}
+	if(gait_2_cnt == 25){
+		state_cmd = 3;
+	}
+		
+	gait_state = state_check(state_cmd, gait_state);		
+	// ROS_INFO("gait_state: [%u]\n", gait_state);  	
 }
 
 
 void motor_ctrl_loop(void)
 {
+	
     int MotorPort;
     int deltav_motor=0,deltav_motor_old,motor_cmd_position,motor_cmd_velocity,max_position;
     int i,nwrite,index,pndex,dndex,nset_acc,max_force_cnt,motor_speed_t,motor_speed_t_old;
@@ -203,13 +253,17 @@ void motor_ctrl_loop(void)
 	
     MotorPort = tty_init(MOTOR_PORT_NUM);
     if(MotorPort<0){
-		//run_info
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
     }
 
     int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
     if(driver_init_resualt == 0){
-		//run_info
-    }	
+		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
+		sensor_run_info_msg.error_log++;
+		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
+    }		
 	
 #if(RUN_MOTION == REAL)
     time_t log_time = time(NULL);
@@ -227,7 +281,7 @@ void motor_ctrl_loop(void)
         deltav_motor_old = 0;
         max_force_cnt = 0;		
 		gettimeofday(&tv,NULL);
-		time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//»ñÈ¡ÏµÍ³Ê±¼ä£¬µ¥Î»Îªms		
+		time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//è·å–ç³»ç»Ÿæ—¶é—´ï¼Œå•ä½ä¸ºms		
 		for(;;){
 			if(EnableFlag == MOTOR_EN_TRUE){
 				motion_cmd_state = motion_cmd_para.state;
@@ -242,16 +296,21 @@ void motor_ctrl_loop(void)
                         ts.tv_nsec %= (1000*1000*1000);
 
                         if(motor_state_old == 0){
-                            int ret1 = pot_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
-                            int ret2 = force_semaphore.timed_wait(boost::posix_time::second_clock::local_time()+ boost::posix_time::seconds(1));
-                            printf("check reualt: %d %d\n",ret1,ret2);
+                            int ret1 = pot_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(1));
+                            int ret2 = force_semaphore.timed_wait(boost::posix_time::second_clock::universal_time()+ boost::posix_time::seconds(1));
+                            ROS_INFO("check reualt: %d %d\n",ret1,ret2);
 
-                            if((ret1 == 0)&&(ret2 == 0)){
-                                //check_info on checking
+                            if((ret1 == 1)&&(ret2 == 1)){
+                                sensor_run_info_msg.state = "motion module is on checking";
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                             }else{
-                                printf("motor module self check abort:can not get senser data\n");
+                                ROS_INFO("motor module self check abort:can not get senser data\n");
 								msg_motion_evt.check_results = no_sensor_data;
                                 pub_msg_motion_evt.publish(msg_motion_evt);
+								
+								sensor_run_info_msg.state = "self check failed: no sensor data";
+								sensor_run_info_msg.error_log++;
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);
                                 break;
                             }
                         }
@@ -263,21 +322,21 @@ void motor_ctrl_loop(void)
                         nwrite = ABSOLUTE_MOVE;
                         motor_ctl(SET_MOVE_MODE,&nwrite,NULL,MotorPort);
 
-                        nwrite = VELOCITY_MODE_MAX_ACC;
+                        nwrite = VELOCITY_MODE_MAX_ACC;						
                         motor_ctl(SET_VELOCITY_ACC,&nwrite,NULL,MotorPort);
 
-                        nwrite = VELOCITY_MODE_MAX_ACC;
+                        nwrite = VELOCITY_MODE_MAX_ACC;						
                         motor_ctl(SET_VELOCITY_DEC,&nwrite,NULL,MotorPort);
 
-                        nset_acc = motion_cmd_para.nset_acc;											//Çı¶¯Æ÷µÄ×î´ó¼ÓËÙ¶ÈÉèÖÃ²ÎÊı
+                        nset_acc = motion_cmd_para.nset_acc;											//é©±åŠ¨å™¨çš„æœ€å¤§åŠ é€Ÿåº¦è®¾ç½®å‚æ•°
                         motor_ctl(SET_MAX_DEC,&nset_acc,NULL,MotorPort);
                         nset_acc = motion_cmd_para.nset_acc;
                         motor_ctl(SET_MAX_ACC,&nset_acc,NULL,MotorPort);
 
-                        motor_cmd_velocity = 200000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                        motor_cmd_velocity = 200000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
-                        //Ñ°Áã×Ô¼ì£¬Ñ­»·´ÎÊı³¬¹ı400´ÎÈÏÎªÎŞ·¨´ïµ½
+                        //å¯»é›¶è‡ªæ£€ï¼Œå¾ªç¯æ¬¡æ•°è¶…è¿‡400æ¬¡è®¤ä¸ºæ— æ³•è¾¾åˆ°
                         int pot_value_try = 400;
 
                         nwrite = ENABLE_POSITION_MODE;
@@ -296,30 +355,34 @@ void motor_ctrl_loop(void)
 #endif
                                 motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
                                 motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
-                                printf("what is pot: %f pot_value_try:%d\n",pot_now,pot_value_try);
+                                ROS_INFO("what is pot: %f pot_value_try:%d\n",pot_now,pot_value_try);
 
                             }else{
                                 motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
                                 nwrite = ENCODER_DEFUALT_POSITON;
                                 motor_ctl(SET_POSITION,&nwrite,NULL,MotorPort);
-                                printf("what is pot: %f try_cnt:%d\n",pot_now,400 - pot_value_try);
+                                ROS_INFO("what is pot: %f try_cnt:%d\n",pot_now,400 - pot_value_try);
                                 break;
                             }
 
                         }
 
                         if(pot_value_try <= 0){
-                            printf("motor module self check abort:can not reach zero position\n");
+                            ROS_INFO("motor module self check abort:can not reach zero position\n");
 							msg_motion_evt.check_results = unreachable_zero_position;
                             pub_msg_motion_evt.publish(msg_motion_evt);		
                             is_check = 1;
+							
+							sensor_run_info_msg.state = "self check failed: can not reach zero position";
+							sensor_run_info_msg.error_log++;
+							pub_sensor_run_info_msg.publish(sensor_run_info_msg);							
                             break;
                         }
 #if((RUN_MOTION == REAL)||(GAIT_B_MODE == STUDY_WALKING_POSITON))
                         motor_cmd_velocity = 100000;
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
-                        //Ô¤½ôÁ¦µã×ÔÊÊÓ¦£¬µçÎ»¼ÆÎ»ÖÃ³¬³ö»òÕßÑ­»·³¬¹ı1·ÖÖÓ£¬ÈÏÎª×Ô¼ìÊ§°Ü
+                        //é¢„ç´§åŠ›ç‚¹è‡ªé€‚åº”ï¼Œç”µä½è®¡ä½ç½®è¶…å‡ºæˆ–è€…å¾ªç¯è¶…è¿‡1åˆ†é’Ÿï¼Œè®¤ä¸ºè‡ªæ£€å¤±è´¥
 
                         uint32_t init_mark;
 
@@ -336,7 +399,7 @@ void motor_ctrl_loop(void)
                             if((pot>0.1)&&(pot<3.3)&&((time_now - init_mark) < 60000)){
 
                             }else{
-                                printf("motor module self check abort:can not reach preload position\n");
+                                ROS_INFO("motor module self check abort:can not reach preload position\n");
                                 
                                 motor_cmd_position = motion_cmd_para.zero_position;
                                 motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
@@ -344,6 +407,11 @@ void motor_ctrl_loop(void)
 								msg_motion_evt.check_results = unreachable_preload_position;
 								pub_msg_motion_evt.publish(msg_motion_evt);	
                                 is_check = 1;
+								
+								sensor_run_info_msg.state = "self check failed: can not reach preload position";
+								sensor_run_info_msg.error_log++;
+								pub_sensor_run_info_msg.publish(sensor_run_info_msg);										
+								
                                 break;
                             }
 
@@ -353,28 +421,28 @@ void motor_ctrl_loop(void)
                             motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
 
                             memcpy(init_force_temp,init_force+1,sizeof(init_force)-4);
-                            printf("init_temp = ");
+                            ROS_INFO("init_temp = ");
                             for(i=0;i<10;i++){
-                                printf("%d ",init_force_temp[i]);
+                                ROS_INFO("%d ",init_force_temp[i]);
                             }
-                            printf("\n");
+                            ROS_INFO("\n");
                             memcpy(init_force,init_force_temp,sizeof(init_force)-4);
                             init_force[9] = SELF_CHECK_FORCE_VALUE - force_now;
-                            printf("init_force = ");
+                            ROS_INFO("init_force = ");
                             for(i=0;i<10;i++){
-                                printf("%d ",init_force[i]);
+                                ROS_INFO("%d ",init_force[i]);
                             }
-                            printf("\n");
+                            ROS_INFO("\n");
 
 
                             memcpy(init_position_temp,init_position+1,sizeof(init_position)-4);
                             memcpy(init_position,init_position_temp,sizeof(init_position)-4);
                             init_position[9] = motor_position.temp;
-                            printf("init_position = ");
+                            ROS_INFO("init_position = ");
                             for(i=0;i<10;i++){
-                                printf("%d ",init_position[i]);
+                                ROS_INFO("%d ",init_position[i]);
                             }
-                            printf("\n");
+                            ROS_INFO("\n");
 
                             int init_ret;
                             init_ret = 1;
@@ -392,10 +460,10 @@ void motor_ctrl_loop(void)
 #elif(WHERE_MOTION == DESKTOP_VERSION)
                                 motor_cmd_position =motor_position.temp - init_force[9]*100;
 #endif
-                                printf("what is motor_cmd_position = %d\n",motor_cmd_position);
+                                ROS_INFO("what is motor_cmd_position = %d\n",motor_cmd_position);
                                 motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
                                 motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
-                                printf("what is init_force = %d\n",init_force[9]);
+                                ROS_INFO("what is init_force = %d\n",init_force[9]);
 
                             }else{
                                 motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
@@ -403,13 +471,13 @@ void motor_ctrl_loop(void)
                                     init_position_overrange = init_position_overrange + init_position[i];
                                 }
                                 
-                                //¸ù¾İ²âµ½µÄÔ¤½ôÁ¦Î»ÖÃ¼ÆËãÁãÎ»ºÍ×î´óÎ»ÖÃ
+                                //æ ¹æ®æµ‹åˆ°çš„é¢„ç´§åŠ›ä½ç½®è®¡ç®—é›¶ä½å’Œæœ€å¤§ä½ç½®
                                 delatv_preload = init_position_overrange/10 - motion_cmd_para.preload_position;
                                 motion_cmd_para.preload_position = delatv_preload + motion_cmd_para.preload_position;
                                 motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
                                 motion_cmd_para.max_position = delatv_preload + motion_cmd_para.max_position;
                                 max_position = motion_cmd_para.max_position;
-                                printf("what is preload_position = %d\n",motion_cmd_para.preload_position);
+                                ROS_INFO("what is preload_position = %d\n",motion_cmd_para.preload_position);
                                 break;
                             }
                         }
@@ -419,9 +487,9 @@ void motor_ctrl_loop(void)
                         }
 
 #endif
-                        //×Ô¼ì³É¹¦ÅäÖÃ²ÎÊı
+                        //è‡ªæ£€æˆåŠŸé…ç½®å‚æ•°
 
-                        motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                        motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
                         //motor_cmd_position = motion_cmd_para.zero_position;
@@ -430,15 +498,19 @@ void motor_ctrl_loop(void)
                         motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
 						msg_motion_evt.check_results = module_check_success;
                         pub_msg_motion_evt.publish(msg_motion_evt);	
-                        is_check = 1;;
-                        printf("motion module selfcheck ok\n");
+                        is_check = 1;
+						
+						sensor_run_info_msg.state = "self check sucsess";
+						pub_sensor_run_info_msg.publish(sensor_run_info_msg);	
+								
+                        ROS_INFO("motion module selfcheck ok\n");
                     }else if((is_check == 1)&&(motor_state_old!=CTL_CMDINITIAL)){
                         is_check = 0;
                     }else{
                         usleep(200000);
                     }
                     break;
-                case CTL_CMDPOWERDOWN:																				//¹Ø»ú
+                case CTL_CMDPOWERDOWN:																				//å…³æœº
 
                     nwrite = DISABLE_MOTOR;
                     motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
@@ -447,7 +519,7 @@ void motor_ctrl_loop(void)
                     return;
                     break;	
 
-                case CTL_CMDMOTIONSLEEP:																		//Í£»ú
+                case CTL_CMDMOTIONSLEEP:																		//åœæœº
 
                     if(motion_cmd_state != motor_state_old){
                         nwrite = ENABLE_POSITION_MODE;
@@ -463,7 +535,7 @@ void motor_ctrl_loop(void)
                     }
                     break;
 					
-                case CTL_CMDMOTIONSTOP:																						//Í£Ö¹
+                case CTL_CMDMOTIONSTOP:																						//åœæ­¢
 
                     if(motion_cmd_state != motor_state_old){
 
@@ -480,7 +552,7 @@ void motor_ctrl_loop(void)
                     }
                     break;
 
-                case CTL_CMDMOTIONSTART:																					//¿ªÊ¼¹¤×÷
+                case CTL_CMDMOTIONSTART:																					//å¼€å§‹å·¥ä½œ
                     if(motion_cmd_state != motor_state_old){						
                         nwrite = ENABLE_POSITION_MODE;
                         motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
@@ -493,12 +565,12 @@ void motor_ctrl_loop(void)
 #endif
 					gait_state_temp = gait_state;
                     switch(gait_state_temp){
-                    case 01:																//Ô¤½ôµã£¬²»ÄÜÊÇµ¥¸öÎ»ÖÃµã£¬ĞèÒªÔÚºÏÊÊµÄ²½Ì¬ºÍÁ¦¾ØÏÂ¿ªÊ¼ÔË¶¯
+                    case 01:																//é¢„ç´§ç‚¹ï¼Œä¸èƒ½æ˜¯å•ä¸ªä½ç½®ç‚¹ï¼Œéœ€è¦åœ¨åˆé€‚çš„æ­¥æ€å’ŒåŠ›çŸ©ä¸‹å¼€å§‹è¿åŠ¨
                         if(gait_state_temp != state_old){
 
                             integral_force = 0;
 
-                            motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_POSITION_MODE;
@@ -514,7 +586,7 @@ void motor_ctrl_loop(void)
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
 
-                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
                         fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
 #elif(RUN_MOTION == REAL)
@@ -522,7 +594,7 @@ void motor_ctrl_loop(void)
 #endif
                         break;
 
-                    case 02:																//À­³¶½×¶Î£¬´Ë½×¶ÎĞèÒª¿ìËÙ¡£Òò´Ë½«´Ë½×¶Î·ÖÎªÁ½¶Î£¬Ò»¶ÎÊÇÖ±½Ó¿ìËÙÔË¶¯£¬µ±¿¿½ü×î´óÎ»ÖÃÊ±ÔÙÒıÈëÁ¦¾Ø»·
+                    case 02:																//æ‹‰æ‰¯é˜¶æ®µï¼Œæ­¤é˜¶æ®µéœ€è¦å¿«é€Ÿã€‚å› æ­¤å°†æ­¤é˜¶æ®µåˆ†ä¸ºä¸¤æ®µï¼Œä¸€æ®µæ˜¯ç›´æ¥å¿«é€Ÿè¿åŠ¨ï¼Œå½“é è¿‘æœ€å¤§ä½ç½®æ—¶å†å¼•å…¥åŠ›çŸ©ç¯
 
 #if(GAIT_B_MODE==STUDY_WALKING_POSITON)					
                         if(gait_state_temp != state_old){
@@ -544,7 +616,7 @@ void motor_ctrl_loop(void)
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
-                        printf("UTC=%d.%d time=%u force=%d position=%d\n",tv.tv_sec,tv.tv_usec,time_now,force_now,motor_position.temp);
+                        ROS_INFO("UTC=%d.%d time=%u force=%d position=%d\n",tv.tv_sec,tv.tv_usec,time_now,force_now,motor_position.temp);
                         break;
 
 #endif					
@@ -574,20 +646,20 @@ void motor_ctrl_loop(void)
                             motor_speed_t = 0;
                         }
 
-                        if(motor_speed_t < -1600000){															//¸ù¾İ²»Í¬µÄÈË£¬ÉèÖÃ²»Í¬µÄËÙ¶È£¿
+                        if(motor_speed_t < -1600000){															//æ ¹æ®ä¸åŒçš„äººï¼Œè®¾ç½®ä¸åŒçš„é€Ÿåº¦ï¼Ÿ
                             motor_speed_t = -1600000;
                         }
 
                         if(motor_speed_t > 1600000){
                             motor_speed_t = 1600000;
                         }
-                        printf("what is para %d %d %d %f\n",motor_speed_t,deltav_force,motor_speed.temp,pot_now);
+                        ROS_INFO("what is para %d %d %d %f\n",motor_speed_t,deltav_force,motor_speed.temp,pot_now);
                         motor_ctl(SET_VELOCITY_MODE_SPEED,&motor_speed_t,NULL,MotorPort);
                         motor_position.temp = ((2.61 - pot_now)/2.31)*35000;
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
-                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
+                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
 #if(RUN_MOTION == REAL)
                         fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
 #endif
@@ -600,7 +672,7 @@ void motor_ctrl_loop(void)
 
                             motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
 
-                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_VELOCITY_MODE;
@@ -674,7 +746,7 @@ void motor_ctrl_loop(void)
                         time_now = (time_now - time_mark)&0x000fffff;
 
                         deltav_force_old = deltav_force;
-                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
                         fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,motor_speed_t,motor_current.temp);
 #elif(RUN_MOTION == REAL)
@@ -687,7 +759,7 @@ void motor_ctrl_loop(void)
 #if(GAIT_B_MODE==PULL_FIX_POSITION)
 
                         if(gait_state_temp != state_old){
-                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             motor_cmd_position = max_position;
                             motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
@@ -707,7 +779,7 @@ void motor_ctrl_loop(void)
                             max_force_cnt++;
                         }
 
-                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
+                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
                         fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
 #elif(RUN_MOTION == REAL)
@@ -717,12 +789,12 @@ void motor_ctrl_loop(void)
 
 #endif // (GAIT_B_MODE==PULL_FIX_POSITION)
 
-                    case 03:					//»Ø¹éÁãµã£¬Õâ¸ö½×¶Î¾ÍÊÇ¿ìËÙ¾Í¹»ÁË
+                    case 03:					//å›å½’é›¶ç‚¹ï¼Œè¿™ä¸ªé˜¶æ®µå°±æ˜¯å¿«é€Ÿå°±å¤Ÿäº†
                         if(gait_state_temp != state_old){
 
                             integral_force = 0;
 
-                            motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_POSITION_MODE;
@@ -744,8 +816,8 @@ void motor_ctrl_loop(void)
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
-                        //printf("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
-                        printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+                        //ROS_INFO("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
+                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
                         fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
 #elif(RUN_MOTION == REAL)
@@ -760,7 +832,6 @@ void motor_ctrl_loop(void)
 #if(GAIT_B_MODE==PULL_FIX_POSITION)
 
                     if((gait_state_temp == 1)&&(state_old == 3)&&(max_force_cnt != 0)){
-
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
@@ -774,7 +845,6 @@ void motor_ctrl_loop(void)
                         }else if(max_position > motion_cmd_para.max_position + MAX_POSITION_ADJUST){
                             max_position = motion_cmd_para.max_position + MAX_POSITION_ADJUST;
                         }
-
                         max_force = 0;
                         max_force_cnt = 0;
                     }
@@ -800,21 +870,34 @@ void motor_ctrl_loop(void)
     close(MotorPort);	
 }
 
-
-
+//é€€å‡ºå‰éœ€è¦æŠŠç”µæœºä½¿èƒ½å…³æ‰ã€‚
+void signalHandler( int signum )
+{
+    ROS_INFO("disable driver ...");
+ 
+	EnableFlag = MOTOR_EN_FALSE;
+	usleep(10000);
+	close(MotorPort);
+	ros::shutdown();
+	// exit(signum);  
+ 
+}
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "serial_motor");
     ros::NodeHandle nh;
 	
-	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",50,true);
-	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 50, force_callback);
-	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 50, pot_callback);
-	ros::Subscriber sub_motion_cmd = nh.subscribe("node_motor_msg_to_sys", 50, motion_cmd_callback);
-	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 50, gait_callback);
+	pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",1,true);
+	pub_sensor_run_info_msg = nh.advertise<motion_control::sensor_run_info_msg>("motor_run_info_msg",1,true);
+	ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 1, force_callback);
+	ros::Subscriber sub_pot = nh.subscribe("msg_serial_pot", 1, pot_callback);
+	ros::Subscriber sub_motion_cmd = nh.subscribe("msg_motion_cmd", 1, motion_cmd_callback);
+	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 1, gait_callback);
 	boost::thread motor_ctrl(&motor_ctrl_loop);
 	
+    // æ³¨å†Œä¿¡å· SIGINT å’Œä¿¡å·å¤„ç†ç¨‹åº
+    signal(SIGINT, signalHandler);  	
 	
 	ros::spin();
     return 0;	
