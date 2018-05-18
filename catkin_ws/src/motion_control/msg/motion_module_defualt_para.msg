@@ -1,4 +1,4 @@
-﻿uint32 foot
+uint32 foot
 uint32 forceaid
 uint32 max_force
 int32 max_position

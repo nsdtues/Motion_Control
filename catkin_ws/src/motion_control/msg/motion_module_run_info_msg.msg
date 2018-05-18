@@ -1,4 +1,4 @@
-﻿string force_state
+string force_state
 uint32 force_error_log
 string motor_state
 uint32 motor_error_log

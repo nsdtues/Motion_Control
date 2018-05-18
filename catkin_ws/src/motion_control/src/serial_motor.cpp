@@ -11,6 +11,7 @@
 #include "motion_control/msg_gait.h"
 #include "motion_control/sensor_run_info_msg.h"
 #include "predefinition.h"
+#include <csignal>
 
 boost::interprocess::interprocess_semaphore sys_cmd_semaphore(0);
 boost::interprocess::interprocess_semaphore pot_semaphore(0);
@@ -224,7 +225,7 @@ void gait_callback(const motion_control::msg_gait& gait_input)
 	}else{
 		gait_2_cnt = 0;
 	}
-	if(gait_2_cnt == 250){
+	if(gait_2_cnt == 25){
 		state_cmd = 3;
 	}
 		
@@ -869,8 +870,18 @@ void motor_ctrl_loop(void)
     close(MotorPort);	
 }
 
-
-
+//退出前需要把电机使能关掉。
+void signalHandler( int signum )
+{
+    ROS_INFO("disable driver ...");
+ 
+	EnableFlag = MOTOR_EN_FALSE;
+	usleep(10000);
+	close(MotorPort);
+	ros::shutdown();
+	// exit(signum);  
+ 
+}
 
 int main(int argc, char **argv)
 {
@@ -885,6 +896,8 @@ int main(int argc, char **argv)
 	ros::Subscriber sub_gait = nh.subscribe("msg_gait", 1, gait_callback);
 	boost::thread motor_ctrl(&motor_ctrl_loop);
 	
+    // 注册信号 SIGINT 和信号处理程序
+    signal(SIGINT, signalHandler);  	
 	
 	ros::spin();
     return 0;	
