@@ -1,4 +1,4 @@
-//serial_motor.cpp  
+ï»¿//serial_motor.cpp  
 //source ~/Motion_Control/catkin_ws/devel/setup.bash
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
@@ -46,11 +46,11 @@ struct motion_cmd_t{
 	int32_t pid_umin;
 }motion_cmd_para;
 
-//Çı¶¯µç»úµÄ½Ó¿Ú£¬Í¨¹ı´®¿ÚASCIIÂëµÄ¸ñÊ½ÓëÇı¶¯Æ÷Í¨Ñ¶£¬Í¨Ñ¶·ÖÁ½ÖÖ
-//Ò»ÖÖÊÇ´øÓĞ²ÎÊıµÄ£¬ĞèÒª½«²ÎÊı´«Èëµ½para
-//²»´ø²ÎÊıµÄpara´«ÈëNULL¼´¿É
-//motion_control.hÎÄ¼şÀïÓĞËùĞèÒªµÄÍ¨Ñ¶¸ñÊ½µÄºê¶¨Òå
-//·µ»ØÎªÇı¶¯Æ÷µÄ·´À¡£¨v ***; ok; e **;£©
+//é©±åŠ¨ç”µæœºçš„æ¥å£ï¼Œé€šè¿‡ä¸²å£ASCIIç çš„æ ¼å¼ä¸é©±åŠ¨å™¨é€šè®¯ï¼Œé€šè®¯åˆ†ä¸¤ç§
+//ä¸€ç§æ˜¯å¸¦æœ‰å‚æ•°çš„ï¼Œéœ€è¦å°†å‚æ•°ä¼ å…¥åˆ°para
+//ä¸å¸¦å‚æ•°çš„paraä¼ å…¥NULLå³å¯
+//motion_control.hæ–‡ä»¶é‡Œæœ‰æ‰€éœ€è¦çš„é€šè®¯æ ¼å¼çš„å®å®šä¹‰
+//è¿”å›ä¸ºé©±åŠ¨å™¨çš„åé¦ˆï¼ˆv ***; ok; e **;ï¼‰
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 {
     int32_t readcnt = 0,nread,nwrite;
@@ -67,11 +67,11 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
         sprintf(com,msg,*p);
     }
     while(try_cmd--){
-        nwrite = write(port,com,strlen(com));		//·¢ËÍ´®¿ÚÃüÁî
+        nwrite = write(port,com,strlen(com));		//å‘é€ä¸²å£å‘½ä»¤
 
         memset(data,'\0',256);
         while(try_t--){
-            nread = read(port,datagram,1);	//»ñÈ¡´®¿ÚÃüÁî
+            nread = read(port,datagram,1);	//è·å–ä¸²å£å‘½ä»¤
             if(nread<0){
                 return -1;
             }
@@ -84,7 +84,7 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
             }
             data[readcnt] = datagram[0];
             readcnt++;
-            if(datagram[0]==0x0D){	//×îºóÒ»Î»Îª¡°\n¡±ÅĞ¶Ï½ÓÊÕµ½×îºóÒ»Î»ºóÔÙ´¦ÀíÊı¾İ
+            if(datagram[0]==0x0D){	//æœ€åä¸€ä½ä¸ºâ€œ\nâ€åˆ¤æ–­æ¥æ”¶åˆ°æœ€åä¸€ä½åå†å¤„ç†æ•°æ®
                 memcpy(temp.com,data,sizeof(data));
                 // ROS_INFO("rev = %s\n",temp.com);
                 if(strstr(temp.com,"v")!=0){
@@ -250,14 +250,14 @@ void motor_ctrl_loop(void)
 	
 	motion_control::msg_motion_evt msg_motion_evt;
 	
-    // MotorPort = tty_init(MOTOR_PORT_NUM);
+    MotorPort = tty_init(MOTOR_PORT_NUM);
     if(MotorPort<0){
 		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
 		sensor_run_info_msg.error_log++;
 		pub_sensor_run_info_msg.publish(sensor_run_info_msg);
     }
-	int driver_init_resualt = 0;
-    // int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
+
+    int driver_init_resualt = driver_init(MotorPort,MOTOR_PORT_NUM);
     if(driver_init_resualt == 0){
 		sensor_run_info_msg.state = "can not open /dev/ttyUSBmotor";
 		sensor_run_info_msg.error_log++;
@@ -280,7 +280,7 @@ void motor_ctrl_loop(void)
         deltav_motor_old = 0;
         max_force_cnt = 0;		
 		gettimeofday(&tv,NULL);
-		time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//»ñÈ¡ÏµÍ³Ê±¼ä£¬µ¥Î»Îªms		
+		time_mark = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);		//è·å–ç³»ç»Ÿæ—¶é—´ï¼Œå•ä½ä¸ºms		
 		for(;;){
 			if(EnableFlag == MOTOR_EN_TRUE){
 				motion_cmd_state = motion_cmd_para.state;
@@ -327,15 +327,15 @@ void motor_ctrl_loop(void)
                         nwrite = VELOCITY_MODE_MAX_ACC;						
                         motor_ctl(SET_VELOCITY_DEC,&nwrite,NULL,MotorPort);
 
-                        nset_acc = motion_cmd_para.nset_acc;											//Çı¶¯Æ÷µÄ×î´ó¼ÓËÙ¶ÈÉèÖÃ²ÎÊı
+                        nset_acc = motion_cmd_para.nset_acc;											//é©±åŠ¨å™¨çš„æœ€å¤§åŠ é€Ÿåº¦è®¾ç½®å‚æ•°
                         motor_ctl(SET_MAX_DEC,&nset_acc,NULL,MotorPort);
                         nset_acc = motion_cmd_para.nset_acc;
                         motor_ctl(SET_MAX_ACC,&nset_acc,NULL,MotorPort);
 
-                        motor_cmd_velocity = 200000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                        motor_cmd_velocity = 200000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
-                        //Ñ°Áã×Ô¼ì£¬Ñ­»·´ÎÊı³¬¹ı400´ÎÈÏÎªÎŞ·¨´ïµ½
+                        //å¯»é›¶è‡ªæ£€ï¼Œå¾ªç¯æ¬¡æ•°è¶…è¿‡400æ¬¡è®¤ä¸ºæ— æ³•è¾¾åˆ°
                         int pot_value_try = 400;
 
                         nwrite = ENABLE_POSITION_MODE;
@@ -381,7 +381,7 @@ void motor_ctrl_loop(void)
                         motor_cmd_velocity = 100000;
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
-                        //Ô¤½ôÁ¦µã×ÔÊÊÓ¦£¬µçÎ»¼ÆÎ»ÖÃ³¬³ö»òÕßÑ­»·³¬¹ı1·ÖÖÓ£¬ÈÏÎª×Ô¼ìÊ§°Ü
+                        //é¢„ç´§åŠ›ç‚¹è‡ªé€‚åº”ï¼Œç”µä½è®¡ä½ç½®è¶…å‡ºæˆ–è€…å¾ªç¯è¶…è¿‡1åˆ†é’Ÿï¼Œè®¤ä¸ºè‡ªæ£€å¤±è´¥
 
                         uint32_t init_mark;
 
@@ -470,7 +470,7 @@ void motor_ctrl_loop(void)
                                     init_position_overrange = init_position_overrange + init_position[i];
                                 }
                                 
-                                //¸ù¾İ²âµ½µÄÔ¤½ôÁ¦Î»ÖÃ¼ÆËãÁãÎ»ºÍ×î´óÎ»ÖÃ
+                                //æ ¹æ®æµ‹åˆ°çš„é¢„ç´§åŠ›ä½ç½®è®¡ç®—é›¶ä½å’Œæœ€å¤§ä½ç½®
                                 delatv_preload = init_position_overrange/10 - motion_cmd_para.preload_position;
                                 motion_cmd_para.preload_position = delatv_preload + motion_cmd_para.preload_position;
                                 motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
@@ -486,9 +486,9 @@ void motor_ctrl_loop(void)
                         }
 
 #endif
-                        //×Ô¼ì³É¹¦ÅäÖÃ²ÎÊı
+                        //è‡ªæ£€æˆåŠŸé…ç½®å‚æ•°
 
-                        motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                        motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                         motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
 
                         //motor_cmd_position = motion_cmd_para.zero_position;
@@ -509,7 +509,7 @@ void motor_ctrl_loop(void)
                         usleep(200000);
                     }
                     break;
-                case CTL_CMDPOWERDOWN:																				//¹Ø»ú
+                case CTL_CMDPOWERDOWN:																				//å…³æœº
 
                     nwrite = DISABLE_MOTOR;
                     motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
@@ -518,7 +518,7 @@ void motor_ctrl_loop(void)
                     return;
                     break;	
 
-                case CTL_CMDMOTIONSLEEP:																		//Í£»ú
+                case CTL_CMDMOTIONSLEEP:																		//åœæœº
 
                     if(motion_cmd_state != motor_state_old){
                         nwrite = ENABLE_POSITION_MODE;
@@ -534,7 +534,7 @@ void motor_ctrl_loop(void)
                     }
                     break;
 					
-                case CTL_CMDMOTIONSTOP:																						//Í£Ö¹
+                case CTL_CMDMOTIONSTOP:																						//åœæ­¢
 
                     if(motion_cmd_state != motor_state_old){
 
@@ -551,7 +551,7 @@ void motor_ctrl_loop(void)
                     }
                     break;
 
-                case CTL_CMDMOTIONSTART:																					//¿ªÊ¼¹¤×÷
+                case CTL_CMDMOTIONSTART:																					//å¼€å§‹å·¥ä½œ
                     if(motion_cmd_state != motor_state_old){						
                         nwrite = ENABLE_POSITION_MODE;
                         motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
@@ -564,12 +564,12 @@ void motor_ctrl_loop(void)
 #endif
 					gait_state_temp = gait_state;
                     switch(gait_state_temp){
-                    case 01:																//Ô¤½ôµã£¬²»ÄÜÊÇµ¥¸öÎ»ÖÃµã£¬ĞèÒªÔÚºÏÊÊµÄ²½Ì¬ºÍÁ¦¾ØÏÂ¿ªÊ¼ÔË¶¯
+                    case 01:																//é¢„ç´§ç‚¹ï¼Œä¸èƒ½æ˜¯å•ä¸ªä½ç½®ç‚¹ï¼Œéœ€è¦åœ¨åˆé€‚çš„æ­¥æ€å’ŒåŠ›çŸ©ä¸‹å¼€å§‹è¿åŠ¨
                         if(gait_state_temp != state_old){
 
                             integral_force = 0;
 
-                            motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_POSITION_MODE;
@@ -593,7 +593,7 @@ void motor_ctrl_loop(void)
 #endif
                         break;
 
-                    case 02:																//À­³¶½×¶Î£¬´Ë½×¶ÎĞèÒª¿ìËÙ¡£Òò´Ë½«´Ë½×¶Î·ÖÎªÁ½¶Î£¬Ò»¶ÎÊÇÖ±½Ó¿ìËÙÔË¶¯£¬µ±¿¿½ü×î´óÎ»ÖÃÊ±ÔÙÒıÈëÁ¦¾Ø»·
+                    case 02:																//æ‹‰æ‰¯é˜¶æ®µï¼Œæ­¤é˜¶æ®µéœ€è¦å¿«é€Ÿã€‚å› æ­¤å°†æ­¤é˜¶æ®µåˆ†ä¸ºä¸¤æ®µï¼Œä¸€æ®µæ˜¯ç›´æ¥å¿«é€Ÿè¿åŠ¨ï¼Œå½“é è¿‘æœ€å¤§ä½ç½®æ—¶å†å¼•å…¥åŠ›çŸ©ç¯
 
 #if(GAIT_B_MODE==STUDY_WALKING_POSITON)					
                         if(gait_state_temp != state_old){
@@ -645,7 +645,7 @@ void motor_ctrl_loop(void)
                             motor_speed_t = 0;
                         }
 
-                        if(motor_speed_t < -1600000){															//¸ù¾İ²»Í¬µÄÈË£¬ÉèÖÃ²»Í¬µÄËÙ¶È£¿
+                        if(motor_speed_t < -1600000){															//æ ¹æ®ä¸åŒçš„äººï¼Œè®¾ç½®ä¸åŒçš„é€Ÿåº¦ï¼Ÿ
                             motor_speed_t = -1600000;
                         }
 
@@ -671,7 +671,7 @@ void motor_ctrl_loop(void)
 
                             motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
 
-                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_VELOCITY_MODE;
@@ -758,7 +758,7 @@ void motor_ctrl_loop(void)
 #if(GAIT_B_MODE==PULL_FIX_POSITION)
 
                         if(gait_state_temp != state_old){
-                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = motion_cmd_para.max_velocity;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             motor_cmd_position = max_position;
                             motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
@@ -788,12 +788,12 @@ void motor_ctrl_loop(void)
 
 #endif // (GAIT_B_MODE==PULL_FIX_POSITION)
 
-                    case 03:					//»Ø¹éÁãµã£¬Õâ¸ö½×¶Î¾ÍÊÇ¿ìËÙ¾Í¹»ÁË
+                    case 03:					//å›å½’é›¶ç‚¹ï¼Œè¿™ä¸ªé˜¶æ®µå°±æ˜¯å¿«é€Ÿå°±å¤Ÿäº†
                         if(gait_state_temp != state_old){
 
                             integral_force = 0;
 
-                            motor_cmd_velocity = 1400000;																		//ÉèÖÃÔË¶¯ËÙ¶ÈÎª14000rpm ´Ë²ÎÊıĞèÒª¿ÉÒÔÅäÖÃ
+                            motor_cmd_velocity = 1400000;																		//è®¾ç½®è¿åŠ¨é€Ÿåº¦ä¸º14000rpm æ­¤å‚æ•°éœ€è¦å¯ä»¥é…ç½®
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_POSITION_MODE;

@@ -1,6 +1,6 @@
-//system_pot.cpp  
-//´´½¨ÓÚ 2018Äê5ÔÂ4ÈÕ
-//¸üĞÂÓÚ 2018Äê5ÔÂ6ÈÕ
+ï»¿//system_pot.cpp  
+//åˆ›å»ºäº 2018å¹´5æœˆ4æ—¥
+//æ›´æ–°äº 2018å¹´5æœˆ6æ—¥
 
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"
@@ -19,7 +19,7 @@ boost::interprocess::interprocess_semaphore sub_semaphore(0);
 motion_control::sensor_run_info_msg sensor_run_info_msg;
 
 #if(WHERE_MOTION == DESKTOP_VERSION)
-int AdcPort = 0;			//µçÎ»¼ÆµÄ¶Ë¿ÚºÅ	
+int AdcPort = 0;			//ç”µä½è®¡çš„ç«¯å£å·	
 
 int get_pot(int port,float *msg)
 {
@@ -99,7 +99,7 @@ void pot_pub_loop(void){
     int i,ret;
     float pot_t,pot_temp[12];
 
-    // AdcPort = tty_init(ADC_PORT_NUM);
+    AdcPort = tty_init(ADC_PORT_NUM);
 
     if(AdcPort<0){
 		msg_serial_pot.serial_pot_state = SENSER_NO_PORT;
@@ -108,7 +108,7 @@ void pot_pub_loop(void){
 		pub_sensor_run_info_msg.publish(sensor_run_info_msg);		
     }
 
-    // driver_init(AdcPort,ADC_PORT_NUM);
+    driver_init(AdcPort,ADC_PORT_NUM);
 
     ret = get_pot(AdcPort,&pot_temp[0]);
 
@@ -125,7 +125,7 @@ void pot_pub_loop(void){
 
     while(1){
 
-        tcflush(AdcPort,TCIFLUSH);					//Çå³ıµô´®¿Ú»º´æ£¬²»È»´®¿Ú»á»º´æ¹ı¶àÊı¾İ£¬µ¼ÖÂÊµÊ±ĞÔ½µµÍ
+        tcflush(AdcPort,TCIFLUSH);					//æ¸…é™¤æ‰ä¸²å£ç¼“å­˜ï¼Œä¸ç„¶ä¸²å£ä¼šç¼“å­˜è¿‡å¤šæ•°æ®ï¼Œå¯¼è‡´å®æ—¶æ€§é™ä½
 
         for(i=0;i<10;i++)
         {

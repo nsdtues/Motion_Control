@@ -1,6 +1,6 @@
-//system_node.cpp  
-//´´½¨ÓÚ 2018Äê5ÔÂ6ÈÕ
-//¸üĞÂÓÚ 2018Äê5ÔÂ6ÈÕ
+ï»¿//system_node.cpp  
+//åˆ›å»ºäº 2018å¹´5æœˆ6æ—¥
+//æ›´æ–°äº 2018å¹´5æœˆ6æ—¥
 
 #include "motion_control/motion_control.h"
 #include "boost/thread.hpp"

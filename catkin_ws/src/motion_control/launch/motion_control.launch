@@ -1,4 +1,4 @@
-<launch>
+﻿<launch>
   <node pkg="motion_control" type="serial_force" name="serial_force" />
   <node pkg="motion_control" type="serial_motor" name="serial_motor" />
   <node pkg="motion_control" type="system_pot" name="system_pot" />

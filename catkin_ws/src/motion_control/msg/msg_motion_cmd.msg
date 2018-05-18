@@ -1,4 +1,4 @@
-uint32 state
+﻿uint32 state
 uint32 mode
 uint32 foot
 uint32 forceaid
