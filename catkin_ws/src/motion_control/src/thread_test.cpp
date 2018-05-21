@@ -7,10 +7,8 @@ u_int8_t flag = 0;
 
 void receive_loop_msg(void)
 {
-    if(flag == 5){
-        ROS_INFO("flag = %d.\n",flag);
-    }else{
-        sleep(1);
+    while(1){
+         ROS_ERROR("flag = %d.\n",flag);
     }
 
 }

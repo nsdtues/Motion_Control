@@ -15,6 +15,10 @@ ros::Publisher pub_msg_motion_evt;
 bool force_ready = false;
 bool pot_ready = false;
 u_int16_t motor_start_type = 0xFFFF;
+u_int8_t motor_cmd_type = 0xFF;
+ros::Timer timer1;
+
+const u_int32_t pub_freq = 1000;
 
 void load_default_settings(void)
 {
@@ -43,23 +47,29 @@ void motion_cmd_callback(const std_msgs::Int16& motion_cmd_input)
         //motion_control::msg_motion_evt motor_status = 0xFFFF;
         switch (cmd_type) {
         case CTL_CMDINITIAL:
+            timer1.stop();
+            motor_cmd_type = CTL_CMDINITIAL;
             motor_init();
             break;
         case CTL_CMDPOWERDOWN:
+            timer1.stop();
+            motor_cmd_type = CTL_CMDPOWERDOWN;
             motor_powerdown();
             break;
         case CTL_CMDMOTIONSLEEP:
+            timer1.stop();
+            motor_cmd_type = CTL_CMDMOTIONSLEEP;
             motor_sleep();
             break;
         case CTL_CMDMOTIONSTOP:
+            timer1.stop();
+            motor_cmd_type = CTL_CMDMOTIONSTOP;
             motor_stop();
             break;
         case CTL_CMDMOTIONSTART:
-            //TODO if_process();
-            if(motor_start_type != 0xFFFF) {
-                motor_start(motor_start_type);
-            }else{
-            //TODO
+            if(motor_cmd_type != CTL_CMDMOTIONSTART){
+                motor_cmd_type = CTL_CMDMOTstartIONSTART;
+                timer1.start();
             }
             break;
         default:
@@ -77,7 +87,18 @@ void gait_callback(const motion_control::msg_gait& gait_input)
 
 }
 
-
+void timer_callback(const ros::TimerEvent&)
+{
+    //TODO if_process();
+    if(motor_start_type != 0xFFFF) {
+        motor_start(motor_start_type);
+    }else{
+    //TODO
+    }
+    if(motor_cmd_type != CTL_CMDMOTIONSTART){
+        timer1.stop();
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -91,6 +112,7 @@ int main(int argc, char **argv)
     ros::Subscriber sub_motion_cmd = nh.subscribe("motor_cmd", 50, motion_cmd_callback);
     ros::Subscriber sub_motion_start_cmd = nh.subscribe("motor_start_cmd", 50, motion_start_cmd_callback);
     //ros::Subscriber sub_gait = nh.subscribe("msg_gait", 50, gait_callback);
+    timer1 = nh.createTimer(ros::Duration(1.0/pub_freq), timer_callback,false,false);
 
     ros::spin();
     return 0;
