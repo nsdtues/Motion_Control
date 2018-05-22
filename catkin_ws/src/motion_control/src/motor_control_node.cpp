@@ -9,6 +9,7 @@
 #include "motion_control/msg_gait.h"
 #include "predefinition.h"
 #include <std_msgs/Int16.h>
+#include "motion_control_interface.h"
 
 ros::Publisher pub_msg_motion_evt;
 
@@ -17,13 +18,8 @@ bool pot_ready = false;
 u_int16_t motor_start_type = 0xFFFF;
 u_int8_t motor_cmd_type = 0xFF;
 ros::Timer timer1;
-
 const u_int32_t pub_freq = 1000;
 
-void load_default_settings(void)
-{
-
-}
 
 void force_callback(const motion_control::msg_serial_force& force_input)
 {
@@ -104,6 +100,22 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "serial_motor_node");
     ros::NodeHandle nh;
+    ros::NodeHandle private_nh("~");
+
+    motion_cmd_t motion_cmd_para;
+    private_nh.getParam("foot", motion_cmd_para.foot);
+    private_nh.getParam("max_force", motion_cmd_para.max_force);
+    private_nh.getParam("max_position", motion_cmd_para.max_position);
+    private_nh.getParam("zero_position", motion_cmd_para.zero_position);
+    private_nh.getParam("preload_position", motion_cmd_para.preload_position);
+    private_nh.getParam("max_velocity", motion_cmd_para.max_velocity);
+    private_nh.getParam("nset_acc", motion_cmd_para.nset_acc);
+    private_nh.getParam("max_pot", motion_cmd_para.max_pot);
+    private_nh.getParam("pid_kp", motion_cmd_para.pid_kp);
+    private_nh.getParam("pid_ki", motion_cmd_para.pid_ki);
+    private_nh.getParam("pid_umax", motion_cmd_para.pid_umax);
+    private_nh.getParam("pid_umin", motion_cmd_para.pid_umin);
+    load_parameter(motion_cmd_para);
 
     pub_msg_motion_evt = nh.advertise<motion_control::msg_motion_evt>("msg_motion_evt",50,true);
     ros::Subscriber sub_force = nh.subscribe("msg_serial_force", 50, force_callback);

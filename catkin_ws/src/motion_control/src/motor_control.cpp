@@ -23,9 +23,9 @@ typedef struct motion_cmd_t{
 
 motion_cmd_t motion_cmd_para;
 
-void load_parameter()
+void load_parameter(motion_cmd_t motion_cmd_para_data)
 {
-
+    motion_cmd_para = motion_cmd_para_data;
 }
 
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
@@ -548,7 +548,7 @@ void motor_start_03()
     fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
 }
 
-void motor_start( uint16 motor_start_type)
+void motor_start( u_int16_t motor_start_type)
 {
     if(motor_state_flag_temp != motor_state_flag_temp_old){
         pthread_mutex_lock(&mutex_client_msg);

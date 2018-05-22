@@ -1,0 +1,33 @@
+<!-- -->
+<launch>
+
+	<arg name="foot" default="1"/>
+	<arg name="max_force" default="3"/>
+	<arg name="max_position" default="6500"/>
+	<arg name="zero_position" default="28500"/>
+	<arg name="preload_position" default="23500"/>
+	<arg name="max_velocity" default="1400000"/>
+	<arg name="nset_acc" default="400000"/>
+	<arg name="max_pot" default="0"/>
+	<arg name="pid_kp" default="3000.0"/>
+	<arg name="pid_ki" default="200.0"/>
+	<arg name="pid_umax" default="100000"/>
+	<arg name="pid_umin" default="100000"/>
+	
+	<!-- rosrun waypoint_follower pure_pursuit -->
+	<node pkg="motion_control" type="motor_control_node" name="motor_control_node" >
+		<param name="foot" value="$(arg foot)"/>
+                <param name="max_force" value="$(arg max_force)"/>
+		<param name="max_position" value="$(arg max_position)"/>
+                <param name="zero_position" value="$(arg zero_position)"/>
+		<param name="preload_position" value="$(arg preload_position)"/>
+                <param name="max_velocity" value="$(arg max_velocity)"/>
+		<param name="nset_acc" value="$(arg nset_acc)"/>
+                <param name="max_pot" value="$(arg max_pot)"/>
+		<param name="pid_kp" value="$(arg pid_kp)"/>
+                <param name="pid_ki" value="$(arg pid_ki)"/>
+		<param name="pid_umax" value="$(arg pid_umax)"/>
+                <param name="pid_umin" value="$(arg pid_umin)"/>
+	</node>
+
+</launch>
