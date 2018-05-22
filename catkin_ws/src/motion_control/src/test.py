@@ -5,6 +5,9 @@ import os
 # from motion_control.msg import sys_cmd_msg_to_motor
 from motion_control.msg import motion_module_defualt_para
 from config import Parameter as para
+import datetime
+import zmq
+
 
 class GET_PARA(object):
     def __init__(self):
@@ -37,13 +40,24 @@ class GET_PARA(object):
 		para_msg.pid_umin = para["pid_umin"]	
 		rospy.loginfo("config para {}".format(para_msg))
 		self.pub_para.publish(para_msg)
-			
-		rate = rospy.Rate(1) # 50Hz
+
+		# bind to gait stream
+		self.fixed_gait_stream = "tcp://*:8011"
+		self.fixed_gait_context = zmq.Context()
+		self.fixed_gait_socket = self.fixed_gait_context.socket(zmq.PUB)
+		self.fixed_gait_socket.bind(self.fixed_gait_stream)
+		
+		rate = rospy.Rate(100) # 100Hz
 		while not rospy.is_shutdown():
 			# cmd_msg = sys_cmd_msg_to_motor()
 			# cmd_msg.syscmd = 'cmdmotorinitial'
 			# self.pub_cmd.publish(cmd_msg)
-
+			self.gait = "GaitL:A, GaitR:B, Gait:GaitWalking"
+			self.fixed_gait_socket.send_string(self.gait)		
+			now = datetime.datetime.now()
+			print("{} ".format(now) + self.gait)				
+			# now = datetime.datetime.now()
+			# print(now.microsecond)
 			rate.sleep()
 
 			

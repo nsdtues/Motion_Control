@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="gait_test" type="fixed_gait_pub.py" name="fixed_gait_pub" output="screen" />
+  <node pkg="gait_test" type="gait_module_sub.py" name="gait_module_sub" output="screen" /> 
+</launch>
