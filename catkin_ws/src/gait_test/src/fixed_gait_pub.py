@@ -2,6 +2,7 @@
 
 import rospy
 import os
+import sys
 import datetime
 import zmq
 
@@ -9,6 +10,13 @@ import zmq
 class FIXED_GAIT_PUB(object):
     def __init__(self):
 		rospy.init_node('fixed_gait_pub')
+		
+		self.cur_path = os.path.abspath(os.path.dirname(os.path.abspath(sys.argv[0])))	
+		self.pub_log_file_path = self.cur_path + "/../log/" + datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S') + ".txt"
+		
+		with open(self.pub_log_file_path, "w") as self.GaitPubFile:
+		    print(self.pub_log_file_path)
+		    self.GaitPubFile.writelines(self.pub_log_file_path + '\n')
 		
 		# bind to gait stream
 		self.fixed_gait_stream = "tcp://*:8011"
