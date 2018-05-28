@@ -1,4 +1,4 @@
-#include "predefinition.h"
+﻿#include "predefinition.h"
 #include <time.h>
 #include <unistd.h>
 #include "motion_control/motion_control.h"
@@ -21,6 +21,18 @@ typedef struct motion_cmd_t{
     int32_t pid_umin;
 }motion_cmd_t;
 
+int MotorPort;
+int deltav_motor=0,deltav_motor_old,motor_cmd_position,motor_cmd_velocity,max_position;
+int i,nwrite,index,pndex,dndex,nset_acc,max_force_cnt,motor_speed_t,motor_speed_t_old;
+uint32_t gait_state_temp,state_old=0,max_force;
+uint32_t time_now,time_mark;
+int32_t deltav_force=0,integral_force=0,init_force[10],deltav_force_old,derivative_force,delatv_preload = 0;
+struct timeval tv;
+struct timespec ts;
+int timeout = 1000,is_check = 0;
+struct motor_ctl_t motor_position,motor_state,motor_speed,motor_current;
+int32_t motion_cmd_state,motor_state_old=0;
+
 motion_cmd_t motion_cmd_para;
 
 void load_parameter(motion_cmd_t motion_cmd_para_data)
@@ -28,6 +40,11 @@ void load_parameter(motion_cmd_t motion_cmd_para_data)
     motion_cmd_para = motion_cmd_para_data;
 }
 
+//驱动电机的接口，通过串口ASCII码的格式与驱动器通讯，通讯分两种
+//一种是带有参数的，需要将参数传入到para
+//不带参数的para传入NULL即可
+//motion_control.h文件里有所需要的通讯格式的宏定义
+//返回为驱动器的反馈（v ***; ok; e **;）
 int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 {
     int32_t readcnt = 0,nread,nwrite;
@@ -44,11 +61,11 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
         sprintf(com,msg,*p);
     }
     while(try_cmd--){
-        nwrite = write(port,com,strlen(com));		//���ʹ�������
+        nwrite = write(port,com,strlen(com));		//发送串口命令
 
         memset(data,'\0',256);
         while(try_t--){
-            nread = read(port,datagram,1);	//��ȡ��������
+            nread = read(port,datagram,1);	//获取串口命令
             if(nread<0){
                 return -1;
             }
@@ -59,9 +76,9 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
             }
             data[readcnt] = datagram[0];
             readcnt++;
-            if(datagram[0]==0x0D){	//����һλΪ��\n���жϽ��յ�����һλ���ٴ�������
+            if(datagram[0]==0x0D){	//最后一位为“\n”判断接收到最后一位后再处理数据
                 memcpy(temp.com,data,sizeof(data));
-                //			printf("rev = %s\n",temp.com);
+                //printf("rev = %s\n",temp.com);
                 if(strstr(temp.com,"v")!=0){
 
                     sscanf(temp.com,"%*s%d",&temp.temp);
@@ -86,9 +103,9 @@ int motor_ctl(const char *msg, int *para,struct motor_ctl_t *rev,int port)
 
 
 
-void motor_init()
+void motor_init(const float pot_now, const uint32_t force_now)
 {
-    int MotorPort;
+	uint32_t init_position[10]
     MotorPort = tty_init(MOTOR_PORT_NUM);
     if(MotorPort<0){
         //run_info
@@ -99,32 +116,14 @@ void motor_init()
         //run_info
     }
 
-    if((motor_state_flag_temp_old == 0)||(is_check == 0)){
+    if((motor_state_old == 0)||(is_check == 0)){
         gettimeofday(&tv,NULL);
         ts.tv_sec = tv.tv_sec;
         ts.tv_nsec = tv.tv_usec*1000 + timeout*1000*1000;
         ts.tv_sec += ts.tv_nsec/(1000*1000*1000);
         ts.tv_nsec %= (1000*1000*1000);
 
-        if(motor_state_flag_temp_old == 0){
-            int ret1 = sem_timedwait(&sem_pot_check,&ts);
-            int ret2 = sem_timedwait(&sem_force_check,&ts);
-            printf("check reualt: %d %d\n",ret1,ret2);
-
-                if((ret1 == 0)&&(ret2 == 0)){
-                    printf("success get senser data\n");
-                    pthread_mutex_lock(&mutex_info);
-                    motor_module_check_info.motor_module_check_results = on_checking;
-                    pthread_mutex_unlock(&mutex_info);
-                }else{
-                    printf("motor module self check abort:can not get senser data\n");
-                    pthread_mutex_lock(&mutex_info);
-                    motor_module_check_info.motor_module_check_results = no_sensor_data;
-                    pthread_mutex_unlock(&mutex_info);
-                    is_check = 1;
-                    sem_post(&sem_client);
-        }
-    }
+	//不再需要检查传感器数值？
 
     motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
     nwrite = motor_state.temp;
@@ -158,22 +157,18 @@ void motor_init()
 
         motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
 
-        pthread_mutex_lock(&mutex_pot);			//互斥锁
-        pot_temp = pot_now;
-        pthread_mutex_unlock(&mutex_pot);
+        if((pot_now>(SELF_CHECK_POT_VALUE+0.02))||(pot_now<(SELF_CHECK_POT_VALUE-0.08))){
 
-        if((pot_temp>(SELF_CHECK_POT_VALUE+0.02))||(pot_temp<(SELF_CHECK_POT_VALUE-0.08))){
-
-            motor_cmd_position = motor_position.temp + MOTOR_ENCODER_DIRECTION*(SELF_CHECK_POT_VALUE - pot_temp)*10000;
+            motor_cmd_position = motor_position.temp + MOTOR_ENCODER_DIRECTION*(SELF_CHECK_POT_VALUE - pot_now)*10000;
             motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
             motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
-            printf("what is pot_temp: %f pot_value_try:%d\n",pot_temp,pot_value_try);
+            printf("what is pot_now: %f pot_value_try:%d\n",pot_now,pot_value_try);
 
         }else{
             motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
             nwrite = ENCODER_DEFUALT_POSITON;
             motor_ctl(SET_POSITION,&nwrite,NULL,MotorPort);
-            printf("what is pot_temp: %f try_cnt:%d\n",pot_temp,400 - pot_value_try);
+            printf("what is pot_now: %f try_cnt:%d\n",pot_now,400 - pot_value_try);
             break;
         }
 
@@ -181,10 +176,9 @@ void motor_init()
 
     if(pot_value_try <= 0){
         printf("motor module self check abort:can not reach zero position\n");
-        pthread_mutex_lock(&mutex_info);
-        motor_module_check_info.motor_module_check_results = unreachable_zero_position;
-        pthread_mutex_unlock(&mutex_info);
-        is_check = 1;
+		//return error can not reach zero position
+		
+		is_check = 1;
         sem_post(&sem_client);
         break;
     }
@@ -201,15 +195,12 @@ void motor_init()
 
     while(1){
 
-        pthread_mutex_lock(&mutex_pot);			//互斥锁
-        pot_temp = pot_now;
-        pthread_mutex_unlock(&mutex_pot);
         gettimeofday(&tv,NULL);
 
         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
         time_now = (time_now - time_mark)&0x000fffff;
 
-        if((pot_temp>0.1)&&(pot_temp<3.3)&&((time_now - init_mark) < 60000)){
+        if((pot_now>0.1)&&(pot_now<3.3)&&((time_now - init_mark) < 60000)){
 
         }else{
             printf("motor module self check abort:can not reach preload position\n");
@@ -218,9 +209,7 @@ void motor_init()
             motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
             motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
 
-            pthread_mutex_lock(&mutex_info);
-            motor_module_check_info.motor_module_check_results = unreachable_zero_position;
-            pthread_mutex_unlock(&mutex_info);
+			//return error can not reach preload position
             is_check = 1;
             sem_post(&sem_client);
             break;
@@ -239,11 +228,8 @@ void motor_init()
         printf("\n");
         memcpy(init_force,init_force_temp,sizeof(init_force)-4);
 
-        pthread_mutex_lock(&mutex_force);			//互斥锁
-        force_temp = force_now;
-        pthread_mutex_unlock(&mutex_force);
 
-        init_force[9] = SELF_CHECK_FORCE_VALUE - force_temp;
+        init_force[9] = SELF_CHECK_FORCE_VALUE - force_now;
         printf("init_force = ");
         for(i=0;i<10;i++){
             printf("%d ",init_force[i]);
@@ -263,7 +249,7 @@ void motor_init()
         int init_ret;
         init_ret = 1;
         for(i=0;i<10;i++){
-            if((abmotor_state_flags(init_force[i]) - 20) < 0){
+            if((abs(init_force[i]) - 20) < 0){
                 init_ret = init_ret&1;
             }else{
                 init_ret = init_ret&0;
@@ -319,19 +305,16 @@ void motor_init()
     motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
     motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
 
-    pthread_mutex_lock(&mutex_info);
-    sprintf(motor_module_check_info.motor_state,"%s",MOTOR_OK);
-    motor_module_check_info.motor_module_check_results = module_check_success;
-    pthread_mutex_unlock(&mutex_info);
-
+	//return check sucsess
+	
     is_check = 1;
     sem_post(&sem_client);
     printf("this is a test start\n");
-}else if((is_check == 1)&&(motor_state_flag_temp_old!=CTL_CMDINITIAL)){
-    is_check = 0;
-}else{
-    usleep(200000);
-}
+	}else if((is_check == 1)&&(motor_state_old!=CTL_CMDINITIAL)){
+		is_check = 0;
+	}else{
+		usleep(200000);
+	}
 }
 
 void motor_powerdown()
@@ -343,7 +326,7 @@ void motor_powerdown()
 
 void motor_sleep()
 {
-    if(motor_state_flag_temp != motor_state_flag_temp_old)
+    if(motor_state_flag_temp != motor_state_old)
     {
         nwrite = ENABLE_POSITION_MODE;
         motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
@@ -359,7 +342,7 @@ void motor_sleep()
 
 void motor_stop()
 {
-    if(motor_state_flag_temp != motor_state_flag_temp_old){
+    if(motor_state_flag_temp != motor_state_old){
 
     motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
     nwrite = motor_state.temp;
@@ -392,22 +375,15 @@ void motor_start_01()
     time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
     time_now = (time_now - time_mark)&0x000fffff;
 
-    pthread_mutex_lock(&mutex_force);			//获取当前力矩
-    force_temp = force_now;
-    pthread_mutex_unlock(&mutex_force);
 
     //printf("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
-    printf("time=%u force=%d position=%d\n",time_now,force_temp,motor_position.temp);//time=0 force=123 position=0
-    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
+    printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,state_temp,0);
 }
 
 void motor_start_02()
 {
     if(state_temp != state_old){
-
-        pthread_mutex_lock(&mutex_force);			//获取当前预紧力
-        pre_force = force_now;
-        pthread_mutex_unlock(&mutex_force);
 
         motor_ctl(TRAJECTORY_ABORT,NULL,NULL,MotorPort);
 
@@ -423,12 +399,7 @@ void motor_start_02()
     motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
     //motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
 
-
-    pthread_mutex_lock(&mutex_force);			//获取当前力矩
-    force_temp = force_now;
-    pthread_mutex_unlock(&mutex_force);
-
-    deltav_force = motor_para_init_temp.max_force*forceaid_temp - force_temp;
+    deltav_force = motor_para_init_temp.max_force*forceaid_temp - force_now;
 
     if(deltav_motor > motor_para_init_temp.pid_umax){
         if(abs(deltav_force) > 200){
@@ -486,8 +457,8 @@ void motor_start_02()
     time_now = (time_now - time_mark)&0x000fffff;
 
     deltav_force_old = deltav_force;
-    printf("time=%u force=%d position=%d\n",time_now,force_temp,motor_position.temp);//time=0 force=123 position=0
-    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,motor_speed_t);
+    printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,state_temp,motor_speed_t);
 }
 
 void motor_start_03()
@@ -534,23 +505,19 @@ void motor_start_03()
         max_position = motor_para_init_temp.max_position;
     }
 
-    pthread_mutex_lock(&mutex_force);			//获取当前力矩
-    force_temp = force_now;
-    pthread_mutex_unlock(&mutex_force);
-
     motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
     motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
     gettimeofday(&tv,NULL);
     time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
     time_now = (time_now - time_mark)&0x000fffff;
     //printf("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
-    printf("time=%u force=%d position=%d\n",time_now,force_temp,motor_position.temp);
-    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
+    printf("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);
+    fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,state_temp,0);
 }
 
 void motor_start( u_int16_t motor_start_type)
 {
-    if(motor_state_flag_temp != motor_state_flag_temp_old){
+    if(motor_state_flag_temp != motor_state_old){
         pthread_mutex_lock(&mutex_client_msg);
         forceaid_temp = forceaid;
         pthread_mutex_unlock(&mutex_client_msg);
