@@ -18,7 +18,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <semaphore.h>
-// #include "Properties.h"
 
 
 #ifdef __cplusplus
@@ -47,6 +46,11 @@ struct motor_module_check_info_t{
 	char motor_port_state[32];
 	char motor_state[32];
 	uint32_t motor_module_check_results;	
+};
+
+struct motor_run_info_t{
+	uint32_t state;
+    uint32_t error_log;
 };
 
 enum check_results_t{
