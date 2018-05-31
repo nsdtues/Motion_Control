@@ -1,7 +1,7 @@
 uint32 state
 uint32 mode
 uint32 foot
-uint32 forceaid
+float32 forceaid
 uint32 max_force
 int32 max_position
 int32 zero_position

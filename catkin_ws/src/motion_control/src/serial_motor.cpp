@@ -33,7 +33,7 @@ struct motion_cmd_t{
 	uint32_t state;
 	uint32_t mode;
 	uint32_t foot;
-	uint32_t forceaid;
+	float forceaid;
 	uint32_t max_force;
 	int32_t max_position;
 	int32_t zero_position;
@@ -45,7 +45,7 @@ struct motion_cmd_t{
 	float pid_ki;
 	int32_t pid_umax;
 	int32_t pid_umin;
-}motion_cmd_para;
+}motion_cmd_para,motion_cmd_para_rawdata;
 
 //驱动电机的接口，通过串口ASCII码的格式与驱动器通讯，通讯分两种
 //一种是带有参数的，需要将参数传入到para
@@ -147,7 +147,7 @@ void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 	motion_cmd_para.mode = motion_cmd_input.mode;
 	motion_cmd_para.foot = motion_cmd_input.foot;
 	motion_cmd_para.forceaid = motion_cmd_input.forceaid;
-	motion_cmd_para.forceaid = 3;
+	motion_cmd_para.forceaid = PULL_RATIO_H;
 	if(sys_cmd_flag == 0){
 		motion_cmd_para.max_force = motion_cmd_input.max_force;
 		motion_cmd_para.max_position = motion_cmd_input.max_position;
@@ -174,6 +174,8 @@ void motion_cmd_callback(const motion_control::msg_motion_cmd& motion_cmd_input)
 		motion_cmd_para.pid_umin = 100000;
 		
 		sys_cmd_flag = 1;
+		
+		motion_cmd_para_rawdata = motion_cmd_para;
 		sys_cmd_semaphore.post();
 		ROS_INFO("sem post"); 		
 	}
@@ -238,7 +240,7 @@ void motor_ctrl_loop(void)
 {
 	
     int MotorPort;
-    int deltav_motor=0,deltav_motor_old,motor_cmd_position,motor_cmd_velocity,max_position;
+    int deltav_motor=0,deltav_motor_old,motor_cmd_position,motor_cmd_velocity,max_position,max_position_adaptive;
     int i,nwrite,index,pndex,dndex,nset_acc,max_force_cnt,motor_speed_t,motor_speed_t_old;
     uint32_t gait_state_temp,state_old=0,max_force;
     uint32_t time_now,time_mark,init_position[10];
@@ -270,11 +272,12 @@ void motor_ctrl_loop(void)
     struct tm *log_tp = localtime(&log_time);
     char log_path[32];
 
-    sprintf(log_path,"./motor_log/motor_log_%d_%02d_%02d_%02d%02d.txt",log_tp->tm_year + 1900,log_tp->tm_mon+1,log_tp->tm_mday,log_tp->tm_hour,log_tp->tm_min);
+    sprintf(log_path,"/home/pi/work/motor_pi/motor_log/motor_log_%d_%02d_%02d_%02d%02d.txt",log_tp->tm_year + 1900,log_tp->tm_mon+1,log_tp->tm_mday,log_tp->tm_hour,log_tp->tm_min);
     FILE *log_fp = fopen(log_path,"w");
 #endif	
 	
 	sys_cmd_semaphore.wait();
+	max_position_adaptive = 0;
 	
 	for(;;){
 		max_position = motion_cmd_para.max_position;
@@ -474,10 +477,22 @@ void motor_ctrl_loop(void)
                                 //根据测到的预紧力位置计算零位和最大位置
                                 delatv_preload = init_position_overrange/10 - motion_cmd_para.preload_position;
                                 motion_cmd_para.preload_position = delatv_preload + motion_cmd_para.preload_position;
-                                motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
-                                motion_cmd_para.max_position = delatv_preload + motion_cmd_para.max_position;
-                                max_position = motion_cmd_para.max_position;
-                                ROS_INFO("what is preload_position = %d\n",motion_cmd_para.preload_position);
+								printf("what is preload_position = %d\n",motion_cmd_para.preload_position);
+                                if(motion_cmd_para.preload_position > motion_cmd_para_rawdata.preload_position + SELF_CHECK_ADJUST_MM*ENCODE_1MM){
+                                    motion_cmd_para.preload_position = motion_cmd_para_rawdata.preload_position + SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                    motion_cmd_para.zero_position = motion_cmd_para_rawdata.zero_position + SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                    motion_cmd_para.max_position = motion_cmd_para_rawdata.max_position + SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                }else if(motion_cmd_para.preload_position < motion_cmd_para_rawdata.preload_position - SELF_CHECK_ADJUST_MM*ENCODE_1MM){
+                                    motion_cmd_para.preload_position = motion_cmd_para_rawdata.preload_position - SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                    motion_cmd_para.zero_position = motion_cmd_para_rawdata.zero_position - SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                    motion_cmd_para.max_position = motion_cmd_para_rawdata.max_position - SELF_CHECK_ADJUST_MM*ENCODE_1MM;
+                                }else{
+                                    motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
+                                    motion_cmd_para.max_position = delatv_preload + motion_cmd_para.max_position;
+                                }
+
+                                max_position_adaptive = 0;
+                                printf("what is preload_position = %d\n",motion_cmd_para.preload_position);
                                 break;
                             }
                         }
@@ -553,7 +568,10 @@ void motor_ctrl_loop(void)
                     break;
 
                 case CTL_CMDMOTIONSTART:																					//开始工作
-                    if(motion_cmd_state != motor_state_old){						
+                    if(motion_cmd_state != motor_state_old){	
+						max_position_adaptive = 0;
+						max_force_cnt = 1;
+						max_force = motion_cmd_para.max_force*motion_cmd_para.forceaid;						
                         nwrite = ENABLE_POSITION_MODE;
                         motor_ctl(SET_DESIRED_STATE,&nwrite,NULL,MotorPort);
 						msg_motion_evt.check_results = module_check_success;
@@ -570,7 +588,7 @@ void motor_ctrl_loop(void)
 
                             integral_force = 0;
 
-                            motor_cmd_velocity = 1400000;																		//设置运动速度为14000rpm 此参数需要可以配置
+                            motor_cmd_velocity = motion_cmd_para.max_velocity*0.5;																		//设置运动速度为14000rpm 此参数需要可以配置
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
                             
                             nwrite = ENABLE_POSITION_MODE;
@@ -586,11 +604,16 @@ void motor_ctrl_loop(void)
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
 
-                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
+						if(force_now > 500){						//考虑到预紧力的存在，设置50N的保护限制
+//							EnableFlag = MOTOR_EN_FALSE;						
+						}						
+						
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,0,motor_current.temp);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,0,motor_current.temp);
 #elif(RUN_MOTION == REAL)
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
 #endif
                         break;
 
@@ -746,11 +769,12 @@ void motor_ctrl_loop(void)
                         time_now = (time_now - time_mark)&0x000fffff;
 
                         deltav_force_old = deltav_force;
-                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,motor_speed_t,motor_current.temp);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,motor_speed_t,motor_current.temp);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,motor_speed_t,motor_current.temp);
 #elif(RUN_MOTION == REAL)
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,motor_speed_t);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,motor_speed_t);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,motor_speed_t);
 #endif
                         break;
 
@@ -759,11 +783,28 @@ void motor_ctrl_loop(void)
 #if(GAIT_B_MODE==PULL_FIX_POSITION)
 
                         if(gait_state_temp != state_old){
+							
+							if(max_force_cnt != 0){
+								max_force = (uint32_t)(max_force/max_force_cnt);
+								deltav_force = motion_cmd_para.max_force*forceaid_temp - max_force;
+								max_position_adaptive = max_position_adaptive - deltav_force*2;		
+								// printf("max_position_adaptive : [%d]\n", max_position_adaptive);
+							}
+
+							if(max_position_adaptive < 0 - MAX_POSITION_ADJUST){
+								max_position_adaptive = 0 - MAX_POSITION_ADJUST;
+							}else if(max_position_adaptive > MAX_POSITION_ADJUST){
+								max_position_adaptive = MAX_POSITION_ADJUST;
+							}	
+							
                             motor_cmd_velocity = motion_cmd_para.max_velocity;																		//设置运动速度为14000rpm 此参数需要可以配置
                             motor_ctl(SET_VELOCITY,&motor_cmd_velocity,NULL,MotorPort);
-                            motor_cmd_position = max_position;
+                            motor_cmd_position = max_position_adaptive + motion_cmd_para.max_position;;
                             motor_ctl(SET_MOTION,&motor_cmd_position,NULL,MotorPort);
                             motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
+
+							max_force = 0;
+							max_force_cnt = 0;							
                         }
 
                         motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
@@ -774,7 +815,7 @@ void motor_ctrl_loop(void)
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
 
-                        if(abs(motor_position.temp - motor_cmd_position) < 100){
+                        if((abs(motor_position.temp - motor_cmd_position) < 100)&&(max_force_cnt < 5)){
                             max_force = max_force + force_now;
                             max_force_cnt++;
                         }
@@ -805,7 +846,29 @@ void motor_ctrl_loop(void)
                             motor_ctl(TRAJECTORY_MOVE,NULL,NULL,MotorPort);
 
                             motor_ctl(GET_MOTOR_FUALT,NULL,&motor_state,MotorPort);
-							//run info motor state
+							//motor_state
+#if(CHANGE_PRELOAD_POSITION == 1)														
+                            delatv_preload = (pre_force - SELF_CHECK_FORCE_VALUE)*10;			//自适应调整预紧力位置
+                            if(delatv_preload > 2*ENCODE_1MM){
+                                delatv_preload = 2*ENCODE_1MM;
+                            }else if(delatv_preload < -2*ENCODE_1MM){
+                                delatv_preload = -2*ENCODE_1MM;
+                            }
+
+                            motion_cmd_para.preload_position = delatv_preload + motion_cmd_para.preload_position;
+                            if(motion_cmd_para.preload_position > motion_cmd_para_rawdata.preload_position + MOTION_ADJUST_MM*ENCODE_1MM){
+                                motion_cmd_para.preload_position = motion_cmd_para_rawdata.preload_position + MOTION_ADJUST_MM*ENCODE_1MM;
+                                motion_cmd_para.zero_position = motion_cmd_para_rawdata.zero_position + MOTION_ADJUST_MM*ENCODE_1MM;
+                                motion_cmd_para.max_position = motion_cmd_para_rawdata.max_position + MOTION_ADJUST_MM*ENCODE_1MM;
+                            }else if(motion_cmd_para.preload_position <motion_cmd_para_rawdata.preload_position - MOTION_ADJUST_MM*ENCODE_1MM){
+                                motion_cmd_para.preload_position = motion_cmd_para_rawdata.preload_position - MOTION_ADJUST_MM*ENCODE_1MM;
+                                motion_cmd_para.zero_position = motion_cmd_para_rawdata.zero_position - MOTION_ADJUST_MM*ENCODE_1MM;
+                                motion_cmd_para.max_position = motion_cmd_para_rawdata.max_position - MOTION_ADJUST_MM*ENCODE_1MM;
+                            }else{
+                                motion_cmd_para.zero_position = delatv_preload + motion_cmd_para.zero_position;
+                                motion_cmd_para.max_position = delatv_preload + motion_cmd_para.max_position;
+                            }
+#endif
                         }
 
                         motor_ctl(GET_ACTUAL_SPEED,NULL,&motor_speed,MotorPort);
@@ -813,43 +876,28 @@ void motor_ctrl_loop(void)
                         motor_ctl(GET_CURRENT,NULL,&motor_current,MotorPort);
 #endif						
                         motor_ctl(GET_POSITION,NULL,&motor_position,MotorPort);
+						
+						if(motor_position.temp > motor_para_init_temp.zero_position - 50*ENCODE_1MM){										//在距离零点5cm以内，力传感器反馈大于300N在时保护
+							if(force_now > 300){
+//								EnableFlag = MOTOR_EN_FALSE;
+							}							
+						}							
+						
                         gettimeofday(&tv,NULL);
                         time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
                         time_now = (time_now - time_mark)&0x000fffff;
-                        //ROS_INFO("%u  motor_position = %d motor_speed = %d\n",time_now,motor_position.temp,motor_speed.temp);
-                        ROS_INFO("time=%u force=%d position=%d\n",time_now,force_now,motor_position.temp);//time=0 force=123 position=0
 #if((RUN_MOTION == REAL)&&(SYSTEM_TEST_CONFIGURATION == CONFIGURATION_ONE))
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0,motor_current.temp);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,0,motor_current.temp);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d current=%d\n",time_now,force_temp,motor_position.temp,state_temp,0,motor_current.temp);
 #elif(RUN_MOTION == REAL)
-                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_now,motor_position.temp,gait_state_temp,0);
+						ROS_INFO("time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
+                        fprintf(log_fp,"time=%u force=%d position=%d state=%d speed_cmd=%d\n",time_now,force_temp,motor_position.temp,state_temp,0);
 #endif                     
                         break;
                     default:
                         usleep(10000);
                         break;
                     }
-
-#if(GAIT_B_MODE==PULL_FIX_POSITION)
-
-                    if((gait_state_temp == 1)&&(state_old == 3)&&(max_force_cnt != 0)){
-                        gettimeofday(&tv,NULL);
-                        time_now = (uint32_t)(tv.tv_sec*1000+tv.tv_usec/1000);
-                        time_now = (time_now - time_mark)&0x000fffff;
-
-                        max_force = (uint32_t)(max_force/max_force_cnt);
-                        deltav_force = motion_cmd_para.max_force - max_force;
-                        max_position = max_position - deltav_force*2;
-
-                        if(max_position < motion_cmd_para.max_position - MAX_POSITION_ADJUST){
-                            max_position = motion_cmd_para.max_position - MAX_POSITION_ADJUST;
-                        }else if(max_position > motion_cmd_para.max_position + MAX_POSITION_ADJUST){
-                            max_position = motion_cmd_para.max_position + MAX_POSITION_ADJUST;
-                        }
-                        max_force = 0;
-                        max_force_cnt = 0;
-                    }
-
-#endif // (GAIT_B_MODE==PULL_FIX_POSITION)
                     state_old = gait_state_temp;
                     break;
                 default:

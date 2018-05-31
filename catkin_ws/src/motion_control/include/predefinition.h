@@ -4,19 +4,19 @@
 #define DESKTOP_VERSION 0                           //穿戴版
 #define EXOSUIT_VERSION 1                           //桌面版
 
-#define ENCODE_1MM 325								//1mm对应的电位计计数  325
-#define SELF_CHECK_ADJUST_MM 30							//自检对应的最大调整位置 mm
-#define MOTION_ADJUST_MM 10									//自适应对应的最大调整位置 mm
+#define ENCODE_1MM 778								//1mm对应的电位计计数  778
+#define SELF_CHECK_ADJUST_MM 15							//自检对应的最大调整位置 mm
+#define MOTION_ADJUST_MM 10									//自适应对应的最大调制位置 mm
 
 
 #define WHERE_MOTION DESKTOP_VERSION
 
 #if(WHERE_MOTION == EXOSUIT_VERSION)
-#define SELF_CHECK_POT_VALUE 2.5
-#define ENCODER_DEFUALT_POSITON 30000
+#define SELF_CHECK_POT_VALUE 2.6
+#define ENCODER_DEFUALT_POSITON 100000				//总行程为100000  设置最远点为0
 #define MOTOR_ENCODER_DIRECTION 1
-#define POT_VALUE_LONG 	1.55						//波登线拉到最长时电位计的数据
-#define POT_VALUE_SHORT 3.05						//波登线拉到最短时电位计的数据
+#define POT_VALUE_LONG 	1.02						//波登线拉到最长时电位计的数据
+#define POT_VALUE_SHORT 1.76						//波登线拉到最短时电位计的数据
 #endif
 
 #if(WHERE_MOTION == DESKTOP_VERSION)

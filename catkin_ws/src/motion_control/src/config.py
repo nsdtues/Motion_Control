@@ -1,7 +1,7 @@
 Parameter = {
     # Data frame amount for analysis
     'foot': 1,
-	'forceaid': 3,
+	'forceaid': 1.0,
     'max_force': 900,
 	'max_position': 6500,
     'zero_position' : 28500,

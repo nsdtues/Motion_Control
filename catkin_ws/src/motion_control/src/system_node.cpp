@@ -181,6 +181,16 @@ void motion_cmd_pub_loop(void)
 				motion_state.erase(0,sizeof("cmdmotorforceaid:")-1);
 				stream << motion_state;
 				stream >> msg_motion_cmd.forceaid;
+				if(msg_motion_cmd.forceaid == 3){
+					msg_motion_cmd.forceaid = PULL_RATIO_H;
+				}else if(msg_motion_cmd.forceaid == 2){
+					msg_motion_cmd.forceaid = PULL_RATIO_M;
+				}else if(msg_motion_cmd.forceaid == 1){
+					msg_motion_cmd.forceaid = PULL_RATIO_L;
+				}else{
+					msg_motion_cmd.forceaid = PULL_RATIO_L;
+				}
+				
 				pub_msg_motion_cmd.publish(msg_motion_cmd);
 			}
             node_motor_msg_to_sys.evt = "setforceaidsuccess";
